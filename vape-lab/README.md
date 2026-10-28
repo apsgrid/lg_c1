@@ -17,7 +17,7 @@ npm run build:single  # one self-contained dist/vape-lab.html (used for the phon
 1. **Formula** (left panel): pick a base, then drag bottles from the 3D shelf into the 4 slots. You can also click a bottle, drop it on the device, or use the slot dropdown. Proportion sliders run 0-100 game points. The radar chart updates live, and after a test it shows the last tested profile as a dashed outline.
 2. **Tune**: five animated dials (intensity, cooling, smoothness, vapour, dependence rating). Each one is a trade-off, and the panel lists the trade-offs that are active right now.
 3. **Brand**: name, label colour, packaging style, logo, tier and price. The label texture on the 3D device updates live, and the unit cost and margin are shown next to it.
-4. **Test** (or press `T`): plays a test-batch animation, then shows overall appeal, originality, balance, repeat purchase, reputation risk, unit cost, margin, projected profit and six customer cards. Each revision is kept in the history and can be restored.
+4. **Test** (or press `T`): plays a test-batch animation, then shows overall appeal, originality, balance, repeat purchase, reputation risk, unit cost, margin, an **In your shop** forecast (five days of the real shop sim at your current location and level) and six customer cards. Each revision is kept in the history and can be restored.
 5. **Journal**: hidden synergies are revealed when a test or a customer comment triggers their hint.
 6. **Library**: save, load, duplicate and delete formulas (stored in localStorage).
 7. **Modes**: *Manual*; *Assisted* (live warnings, clash highlights and synergy nudges); *Auto* (a strategy loop that maximises profit or originality, targets a segment, aims for premium, or improves the existing product).
@@ -34,14 +34,14 @@ Switch from **Lab** to **Shop** in the top bar.
 
 **Commissions.** Once the Lab is open, loyal regulars sometimes ask for something bespoke ("It's my partner's birthday on day 8. Something really icy, and it has to have mango in it."). Accept at the counter, then design it in the Lab's **Orders** tab, which checks each part of the brief live against the formula on your bench and shows a 0-100 match: 65% from the brief and 35% from how that customer type rates it. Hand it in before the deadline and they collect it at your next opening. 75+ is a triumph: a tip, a big loyalty boost, a friend who becomes a regular, and the formula saved to your Library as a signature product. Below 50 they're let down, and missing the deadline costs loyalty and reputation. The logic is in `src/sim/commission.ts`.
 
-**One set of numbers.** The Lab's Test tab forecasts how a product would sell in your actual shop by running five days of the real shop sim (same level, reputation and upgrades). Each product on the shelf shows how every customer type rates it at its current price.
+**One set of numbers.** The Lab's Test tab forecasts how a product would sell in your actual shop by running five days of the real shop sim (same location, level, reputation, upgrades, rivals and market share). Every place in the City shows the same kind of forecast for your whole range. Each product on the shelf shows how every customer type rates it at its current price.
 
 **Serving.** Press **Open up** and customers come in one at a time. Most browse and buy on their own; some stop at the counter:
 - **Advice:** "Got anything really icy?" Pick a product. A good match earns reputation and loyalty and may win a regular; a poor one loses the sale.
-- **ID checks:** a customer looks young. Ask for ID, or serve them. Selling to a minor costs a fine and a big reputation hit.
+- **ID checks:** a customer looks young. Ask for ID, or serve them. Serving a minor adds heat, and some are Trading Standards test purchases (a 250 cr fine).
 - **Returns:** a faulty unit comes back. Refund it, swap it for a new one, or refuse (keeps the cash, hurts reputation and loyalty).
 - **Nosy questions:** "What exactly goes into this one?" Genuine fans love hearing about it, but it might be a rival's secret shopper taking notes.
-- **Shoplifters:** something goes missing and you choose who to stop out of three customers. Stopping the right one recovers the stock; stopping the wrong one loses reputation. A security guard points out the thief.
+- **Shoplifters:** something goes missing and you choose who to stop out of three customers. Stopping the right one recovers the stock; stopping the wrong one loses reputation. CCTV narrows it to two suspects, and a security guard points out the thief.
 
 **Trade-offs at the counter.** Every choice takes time, shown on its button, and the queue meter fills while you're busy. Once it's long, people give up and leave. So the careful answer always costs something:
 - Asking for ID takes time, and some adults take offence and walk out (an ID scanner fixes both). Serving a minor is still never worth it.
@@ -55,7 +55,7 @@ Watchful staff and the second till upgrade keep the queue moving.
 
 **Disposables.** Set a product's format in the Lab's Brand tab. Disposables cost half as much to make, so margins are high, but far more of them are faulty (20% at budget tier, 12% at standard, 6% at premium) and come back as returns over the next couple of days.
 
-**Other tabs:** Regulars (loyalty and favourites), Rivals (knock-offs and what security thinks rivals know), Ledger (cash and daily profit).
+**Other tabs:** Regulars (loyalty and favourites) and Ledger (cash and daily profit). Everything about rivals lives in the City's Rivals tab.
 
 The day sim lives in `src/sim/shop.ts`. It is pure and seeded: `beginDay` lines up the visitors, `step` serves the next one or returns an encounter, `resolve` applies your choice, and `endDay` closes up. `simulateDay` plays a whole day with a choice policy and is used by the tests.
 
@@ -71,6 +71,18 @@ Switch to **City** in the top bar for a top-down map of 11 locations: a school, 
 - **Drive-bys.** From the City you can drive past a rival at night and lob firebombs in a silly timing mini game. Each window hit shuts them for a day and burns some of their notes on your recipes. It adds a lot of heat, the police may pull you over (fine, closed tomorrow), and their grudge makes revenge more likely. One drive-by a night.
 
 
+
+## The turf war
+
+Every district has a market share split between you, the three rival chains and independent corner shops, shown as a coloured ring on the map. Shares drift each day toward each side's strength: how present they are (a store there counts fully, a store nearby counts a bit) times how good they are. Your quality comes from reputation, how well your range suits the local customers, and price (`src/sim/turf.ts`).
+
+- **Share matters.** Your share where you sell scales how many customers come in.
+- **Rivals fight back.** Once you have a store, the chains open branches where they're winning (often right where you're doing well), close branches that struggle, start **price wars** where you're beating them (keep your average price under 12 cr to shrug them off), and build a grudge as you take their customers. Grudges make protests and firebombs more likely.
+- **Your chain.** From the Large store you can open up to 4 branches (1,500 cr each). They fight for their own districts and sell from their own deliveries, so they don't empty your main store.
+- **Winning draws the police.** Every district you lead adds a little heat each day, and big leads bring 🚨 **crackdowns**: extra patrols for 5 days and a raid risk even if you've kept your heat down.
+- **Run the city.** Lead 6 of the 11 districts (the biggest share, and at least 30%) to win. Go more than 1,000 cr into debt and the business goes under. Either way you can play on or start a new run.
+
+## Layout
 
 ```
 data/          notes, bases, synergies, customers (JSON)

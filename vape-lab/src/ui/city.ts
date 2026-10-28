@@ -1,6 +1,7 @@
 import {
-  buyStash, cityLoc, distance, moveStore, parkCar, relocationCost, restockDays, sellLocId, STASH_COST, STASH_MOVE_COST,
-  storageLocId, tierOf, type CityLocation, type ShopState,
+  BRANCH_COST, branchStatus, buyStash, cityLoc, closeBranch, districtsLed, forecastAt, INDIE, intelEstimate, isCrackdown,
+  KNOCKOFF_AT, leader, moveStore, openBranch, parkCar, relocationCost, restockDays, sellLocId, STASH_COST, STASH_MOVE_COST,
+  storageLocId, tierOf, turfOf, WIN_DISTRICTS, YOU, type CityLocation, type PlaceForecast, type ShopState,
 } from '../sim';
 import { onShop, shopAction, shopState } from '../shopState';
 import { data } from '../state';
@@ -16,6 +17,20 @@ function select(id: string): void {
 }
 
 const pct = (v: number) => `${v >= 1 ? '+' : '−'}${Math.round(Math.abs(v - 1) * 100)}%`;
+const YOU_COLOUR = '#ff4fa3';
+const INDIE_COLOUR = '#6b7090';
+
+function ownerColour(s: ShopState, owner: string): string {
+  if (owner === YOU) return YOU_COLOUR;
+  if (owner === INDIE) return INDIE_COLOUR;
+  return s.rivals.find((r) => r.id === owner)?.colour ?? '#888';
+}
+
+function ownerName(s: ShopState, owner: string): string {
+  if (owner === YOU) return 'You';
+  if (owner === INDIE) return 'Independents';
+  return s.rivals.find((r) => r.id === owner)?.name ?? owner;
+}
 
 function heatLabel(h: number): string {
   return h >= 70 ? 'Scorching: expect a bust' : h >= 45 ? 'Hot: police are watching' : h >= 20 ? 'Warm' : 'Cool';
@@ -75,6 +90,7 @@ export function mountCityMap(stage: HTMLElement): void {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const t = (performance.now() - t0) / 1000;
     const s = shopState.shop;
+    const turf = turfOf(s, data);
     // Pins and labels scale with the map so small screens stay readable.
     const k = Math.max(0.6, Math.min(1, Math.min(L.sx, L.sy) / 560));
     const P = (x: number, y: number) => toPx(L, x, y);
@@ -152,6 +168,27 @@ export function mountCityMap(stage: HTMLElement): void {
       ctx.strokeStyle = isSel ? '#ff4fa3' : isHover ? '#a39fbb' : '#3a4060';
       ctx.lineWidth = isSel ? 3 : 1.5;
       ctx.beginPath(); ctx.arc(px, py, 20 * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // Market-share ring: who owns this district.
+      const shares = turf[loc.id] ?? {};
+      let a0 = -Math.PI / 2;
+      for (const [owner, v] of Object.entries(shares).sort((x, y) => y[1] - x[1])) {
+        if (v < 0.5) continue;
+        const a1 = a0 + (v / 100) * Math.PI * 2;
+        ctx.strokeStyle = ownerColour(s, owner);
+        ctx.lineWidth = 5 * k;
+        ctx.beginPath(); ctx.arc(px, py, 25 * k, a0, a1); ctx.stroke();
+        a0 = a1;
+      }
+      const lead = leader(shares);
+      if (lead.owner === YOU && lead.share >= 30) {
+        ctx.strokeStyle = 'rgba(255,79,163,0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, py, (30 + Math.sin(t * 3) * 1.5) * k, 0, Math.PI * 2); ctx.stroke();
+      }
+      if (isCrackdown(s, loc.id)) {
+        ctx.font = `${Math.round(14 * k)}px system-ui, "Apple Color Emoji", sans-serif`;
+        ctx.fillText('🚨', px - 26 * k, py - 20 * k);
+      }
       ctx.font = `${Math.round(20 * k)}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -159,7 +196,7 @@ export function mountCityMap(stage: HTMLElement): void {
       ctx.font = `600 ${Math.max(9, Math.round(11 * k))}px system-ui, sans-serif`;
       ctx.fillStyle = isSel ? '#ffd1ea' : '#cfcbe0';
       // On small maps only the selected place gets its full name.
-      ctx.fillText(k < 0.8 && !isSel ? loc.type.split(' ')[0] : loc.name, px, py + 32 * k);
+      ctx.fillText(k < 0.8 && !isSel ? loc.type.split(' ')[0] : loc.name, px, py + 38 * k);
       // Police presence dots.
       const dots = Math.round(loc.police * 4);
       for (let i = 0; i < dots; i++) {
@@ -168,14 +205,16 @@ export function mountCityMap(stage: HTMLElement): void {
       }
     }
 
-    // Rival stores.
-    for (const r of s.rivals) {
-      const loc = cityLoc(data, r.loc);
+    // Rival stores (every branch).
+    const crowd: Record<string, number> = {};
+    for (const r of s.rivals) for (const id of r.stores) {
+      const loc = cityLoc(data, id);
       if (!loc) continue;
       const [px, py] = P(loc.x, loc.y);
+      const n = crowd[id] = (crowd[id] ?? 0) + 1;
       const closed = r.closedUntil >= s.day;
       ctx.save();
-      ctx.translate(px + 22 * k, py - 14 * k);
+      ctx.translate(px + (24 + (n - 1) * 15) * k, py - 22 * k);
       ctx.scale(k, k);
       ctx.fillStyle = closed ? '#3a2020' : r.colour;
       roundRect(ctx, -2, -10, 18, 16, 4);
@@ -206,7 +245,16 @@ export function mountCityMap(stage: HTMLElement): void {
     };
     marker(s.home, '🏠', -22, 14);
     marker(s.stash, '📦', -22, -14, '#ffd96a');
-    marker(s.store, '🏪', 22, 14, '#ff4fa3');
+    marker(s.store, '🏪', 24, 16, '#ff4fa3');
+    for (const b of s.branches ?? []) marker(b, '🏬', 24, 16, '#ff4fa3');
+
+    // How close you are to running the city.
+    const led = districtsLed(s, data).length;
+    ctx.font = '700 13px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = s.wonDay ? '#ffd96a' : '#e9e6f2';
+    ctx.fillText(s.wonDay ? '👑 You run the city' : `Districts you lead: ${led} / ${WIN_DISTRICTS}`, L.ox + 6, L.oy + 6);
     marker(s.car, '🚗', 0, 22 + Math.sin(t * 3) * 1.5, '#5ad7ff');
 
     requestAnimationFrame(draw);
@@ -226,6 +274,33 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 // --- Selected place ----------------------------------------------------------------------------
 
+function grudgeLabel(g: number): string {
+  return g >= 1.5 ? 'serious' : g >= 0.5 ? 'some' : 'none';
+}
+
+const forecastCache = new Map<string, PlaceForecast>();
+/** "If you sold here": five days of the real sim with your current range. */
+function forecastBlock(s: ShopState, loc: CityLocation): HTMLElement | null {
+  if (s.tier === 1 || !s.listings.length) return null;
+  const key = `${loc.id}|${s.day}|${s.tier}|${Math.round(s.reputation)}|${Math.round(s.heat / 10)}|${s.listings.map((l) => `${l.product.id}@${l.price}`).join(',')}|${(s.upgrades ?? []).length}`;
+  let f = forecastCache.get(key);
+  if (!f) {
+    f = forecastAt(s, data, loc.id);
+    if (forecastCache.size > 60) forecastCache.clear();
+    forecastCache.set(key, f);
+  }
+  const here = sellLocId(s) === loc.id;
+  return h('div.place-forecast', {},
+    h('div.fine', {}, here ? 'Here, with your current range (5-day trial run):' : s.tier === 0 ? 'If you parked and sold here (5-day trial run):' : 'If your store were here (5-day trial run):'),
+    h('div.pf-row', {},
+      h('div', {}, h('span.muted', {}, 'Profit'), h('b', { class: f.profitPerDay >= 0 ? 'good' : 'bad' }, `${Math.round(f.profitPerDay)} cr/day`)),
+      h('div', {}, h('span.muted', {}, 'Customers'), h('b', {}, `${Math.round(f.visitorsPerDay)}/day`)),
+      h('div', {}, h('span.muted', {}, 'Restock'), h('b', {}, f.restockDays === 1 ? 'next day' : `${f.restockDays} days`)),
+      h('div', {}, h('span.muted', {}, 'Bust risk'), h('b', { class: f.bustRisk === 'high' ? 'bad' : f.bustRisk === 'medium' ? 'warn' : 'good' }, f.bustRisk)),
+    ),
+  );
+}
+
 function heatBlock(s: ShopState): HTMLElement {
   return h('div.heat', { class: s.heat >= 45 ? 'hot' : '' },
     h('div.heat-head', {}, h('span', {}, '🔥 Heat'), h('b', {}, Math.round(s.heat)), h('span.fine', {}, heatLabel(s.heat))),
@@ -243,13 +318,16 @@ export function mountCityPanel(root: HTMLElement): void {
     body.append(heatBlock(s));
     if (!loc) return;
     const tier = tierOf(s);
-    const rivalsHere = s.rivals.filter((r) => r.loc === loc.id);
+    const rivalsHere = s.rivals.filter((r) => r.stores.includes(loc.id));
     const yours = [
       s.home === loc.id ? '🏠 Home & garage' : null,
       s.car === loc.id ? '🚗 Your car' : null,
       s.stash === loc.id ? '📦 Your stash' : null,
       s.store === loc.id ? '🏪 Your store' : null,
+      (s.branches ?? []).includes(loc.id) ? '🏬 Your branch' : null,
+      isCrackdown(s, loc.id) ? '🚨 Police crackdown' : null,
     ].filter(Boolean) as string[];
+    const shares = Object.entries(turfOf(s, data)[loc.id] ?? {}).sort((a, b) => b[1] - a[1]);
 
     body.append(h('div.place', {},
       h('div.place-head', {}, h('span.place-icon', {}, loc.icon), h('div', {}, h('h2', {}, loc.name), h('div.fine', {}, loc.type))),
@@ -265,6 +343,11 @@ export function mountCityPanel(root: HTMLElement): void {
         const c = data.customers.find((x) => x.id === id);
         return h('span.rating', { title: `${c?.name}: ${pct(m ?? 1)}`, style: `--sc:${(m ?? 1) >= 1 ? 'var(--good)' : 'var(--bad)'}` }, c?.avatar ?? '?', h('b', {}, (m ?? 1) >= 1 ? '▲' : '▼'));
       })),
+      h('h3', {}, 'Who sells here'),
+      h('div.share-bar', { role: 'img', 'aria-label': shares.map(([o, v]) => `${ownerName(s, o)} ${Math.round(v)}%`).join(', ') },
+        ...shares.filter(([, v]) => v >= 1).map(([o, v]) => h('div', { style: `width:${v}%;background:${ownerColour(s, o)}`, title: `${ownerName(s, o)} ${Math.round(v)}%` }))),
+      h('div.share-legend', {}, ...shares.filter(([, v]) => v >= 3).map(([o, v]) => h('span', {}, h('i', { style: `background:${ownerColour(s, o)}` }), `${ownerName(s, o)} ${Math.round(v)}%`))),
+      forecastBlock(s, loc),
     ));
 
     // Actions.
@@ -290,6 +373,20 @@ export function mountCityPanel(root: HTMLElement): void {
         onclick: () => { shopAction((x) => buyStash(x, loc.id)); toast(`Stash house set up at ${loc.name}.`); },
       }, `📦 ${s.stash ? 'Move stash here' : 'Buy a stash house here'}`, h('span.fine', {}, ` · ${cost} cr, +10 cr/day`)));
     }
+    if (s.tier >= 4 || (s.branches ?? []).length) {
+      if ((s.branches ?? []).includes(loc.id)) {
+        acts.append(h('button', {
+          disabled: shopState.playing,
+          onclick: () => { shopAction((x) => closeBranch(x, loc.id), 'upgrade'); toast(`Closed your ${loc.name} branch.`); },
+        }, `🏬 Close this branch`));
+      } else {
+        const st = branchStatus(s, loc.id);
+        acts.append(h('button', {
+          class: st.ok ? 'primary' : '', disabled: shopState.playing || !st.ok,
+          onclick: () => { shopAction((x) => openBranch(x, loc.id), 'upgrade'); toast(`Opened a branch in ${loc.name}.`); },
+        }, `🏬 Open a branch here`, h('span.fine', {}, st.ok ? ` · ${BRANCH_COST} cr, ~55 cr/day rent` : ` · ${st.reason}`)));
+      }
+    }
     for (const r of rivalsHere) {
       const closed = r.closedUntil >= s.day;
       acts.append(h('button.danger-btn', {
@@ -298,7 +395,7 @@ export function mountCityPanel(root: HTMLElement): void {
       }, `🔥 Drive-by on ${r.name}`, h('span.fine', {}, closed ? ' · already shut' : s.lastDriveByDay === s.day ? ' · one per night' : ' · big heat')));
     }
     if (acts.childElementCount) body.append(h('h3', {}, 'Do something here'), acts);
-    if (rivalsHere.length) body.append(...rivalsHere.map((r) => h('p.fine', {}, `${r.name} trades here. ${r.closedUntil >= s.day ? `Shut until day ${r.closedUntil + 1}.` : `Grudge against you: ${r.grudge >= 1.5 ? 'serious' : r.grudge >= 0.5 ? 'some' : 'none'}.`}`)));
+    if (rivalsHere.length) body.append(...rivalsHere.map((r) => h('p.fine', {}, `${r.name} has a ${r.loc === loc.id ? 'flagship store' : 'branch'} here. ${r.closedUntil >= s.day ? `Shut until day ${r.closedUntil + 1}.` : `Grudge against you: ${grudgeLabel(r.grudge)}.`}`)));
   };
   listeners.add(render);
   onShop((r) => { if (r !== 'live') render(); });
@@ -315,10 +412,17 @@ export function mountCityOverview(root: HTMLElement): void {
     const s = shopState.shop;
     const name = (id?: string) => cityLoc(data, id)?.name ?? '—';
     const days = restockDays(s, data);
+    const led = districtsLed(s, data);
     body.append(
+      h('div.win', { class: s.wonDay ? 'won' : '' },
+        h('div.win-head', {}, h('b', {}, s.wonDay ? `👑 You ran the city on day ${s.wonDay}` : 'Run the city'), h('span', {}, `${led.length} / ${WIN_DISTRICTS} districts`)),
+        bar((led.length / WIN_DISTRICTS) * 100, 'var(--accent)'),
+        h('p.fine', {}, led.length ? `You lead: ${led.map((l) => name(l)).join(', ')}.` : 'Lead a district by having the biggest share there (at least 30%).'),
+        h('p.fine', {}, `Lead ${WIN_DISTRICTS} of ${(data.city ?? []).length} districts to win. Your share grows where you trade, with good reputation, a range that suits the locals, and fair prices. Leading draws the police, though.`),
+      ),
       heatBlock(s),
       h('ul.heat-notes', {},
-        h('li', {}, 'Raised by: selling from the car, serving kids, drive-bys, protests, refusing refunds.'),
+        h('li', {}, 'Raised by: selling from the car, serving kids, drive-bys, protests, refusing refunds, and leading districts (big leads bring 🚨 crackdowns).'),
         h('li', {}, 'Cools by 4 a day. Busts cut it, and moving your store cuts it by 60%.'),
         h('li', {}, 'Police dots on the map show how closely each area is watched.'),
       ),
@@ -333,20 +437,55 @@ export function mountCityOverview(root: HTMLElement): void {
       h('p.fine', {}, s.tier === 0
         ? 'Your car is your shop. Park it near your stock for fast restocks, and somewhere quiet if things get hot.'
         : 'Stock travels from your garage or stash, in your car, to where you sell. Keep the car between them.'),
-      h('h3', {}, 'Rival stores'),
-      ...s.rivals.map((r) => {
-        const closed = r.closedUntil >= s.day;
-        const dist = Math.round(distance(cityLoc(data, r.loc), cityLoc(data, sellLocId(s))));
-        return h('div.rival', { style: `--c:${r.colour}` },
-          h('div.rival-head', {}, h('span.swatch'), h('b', {}, r.name), h('span.fine', {}, closed ? '🔥 shut' : `${name(r.loc)} · ${dist < 25 ? 'nearby' : 'across town'}`)),
-          h('div.fine', {}, `Grudge: ${r.grudge >= 1.5 ? 'serious' : r.grudge >= 0.5 ? 'some' : 'none'}${tierOf(s).rivals ? '' : ' · they haven\'t noticed you yet'}`),
-          h('button.small.danger-btn', {
-            disabled: shopState.playing || closed || s.lastDriveByDay === s.day,
-            onclick: () => { select(r.loc); openDriveBy(r.id); },
-          }, closed ? 'Shut' : s.lastDriveByDay === s.day ? 'One drive-by a night' : '🔥 Drive-by'),
-        );
-      }),
+      h('h3', {}, 'Your chain'),
+      (s.branches ?? []).length
+        ? h('div.sites', {}, ...(s.branches ?? []).map((b) => h('div', {}, h('span', {}, `🏬 ${name(b)}`), h('b', {}, `${Math.round(turfOf(s, data)[b]?.[YOU] ?? 0)}% share`))))
+        : h('p.fine', {}, s.tier >= 4 ? `Open up to 4 branches (${BRANCH_COST} cr each) from a place's panel. Each one fights for its district and sells from its own deliveries.` : 'From the Large store you can open branches across the city.'),
     );
+  };
+  onShop((r) => { if (r !== 'live') render(); });
+  render();
+}
+
+// --- Rivals (one place for everything about them) -----------------------------------------------
+
+export function mountCityRivals(root: HTMLElement): void {
+  const body = h('div');
+  root.append(body);
+  const render = () => {
+    clear(body);
+    const s = shopState.shop;
+    const turf = turfOf(s, data);
+    const name = (id?: string) => cityLoc(data, id)?.name ?? '—';
+    body.append(h('p.hint', {}, tierOf(s).rivals
+      ? `Three chains want the city. They open branches where they're winning, close the ones that struggle, start price wars, and hit back when you take their customers. Their secret shoppers learn your recipes; at ${KNOCKOFF_AT}% they sell a knock-off.`
+      : 'The rival chains haven\'t noticed you yet. Once you open a store, expect competition, secret shoppers and worse.'));
+    for (const r of s.rivals) {
+      const closed = r.closedUntil >= s.day;
+      const leads = Object.keys(turf).filter((l) => leader(turf[l]).owner === r.id && leader(turf[l]).share >= 30);
+      const war = (r.priceWarUntil ?? 0) >= s.day;
+      const intel = s.listings.map((l) => {
+        const est = intelEstimate(s, r, l.product.id);
+        return h('div.intel-row', {},
+          h('span', {}, l.product.brand.name || 'Untitled'),
+          est === null ? h('span.muted.fine', {}, 'unknown') : h('div.intel', {}, bar(est, est >= KNOCKOFF_AT ? 'var(--bad)' : est >= 40 ? 'var(--mid)' : 'var(--good)'), h('span.fine', {}, `~${est}%`)),
+        );
+      });
+      body.append(h('div.rival', { style: `--c:${r.colour}` },
+        h('div.rival-head', {}, h('span.swatch'), h('b', {}, r.name),
+          h('span.fine', {}, closed ? `🔥 shut until day ${r.closedUntil + 1}` : `${'●'.repeat(Math.round(r.aggression * 5))}${'○'.repeat(5 - Math.round(r.aggression * 5))} aggression`)),
+        h('div.fine', {}, `Stores: ${r.stores.map((l) => `${name(l)}${l === r.loc ? ' (HQ)' : ''}`).join(', ')}`),
+        h('div.fine', {}, `Leads ${leads.length} district${leads.length === 1 ? '' : 's'} · grudge: ${grudgeLabel(r.grudge)} · shoppers caught: ${r.caught}${r.bannedUntil >= s.day ? ` (banned until day ${r.bannedUntil})` : ''}`),
+        war ? h('div.ko', {}, `Price war until day ${r.priceWarUntil}: keep your average price under 12 cr or lose customers where you meet them.`) : null,
+        r.knockoffs.length ? h('div.ko', {}, `Knock-offs: ${r.knockoffs.map((k) => `“${k.name}” (day ${k.day})`).join(', ')}`) : null,
+        h('div.fine.intel-title', {}, s.vigilance ? 'What your staff think they know about your recipes:' : 'Hire security in the Shop to get intel on what they know.'),
+        s.vigilance ? h('div', {}, ...intel) : null,
+        h('button.small.danger-btn', {
+          disabled: shopState.playing || closed || s.lastDriveByDay === s.day,
+          onclick: () => { select(r.loc); openDriveBy(r.id); },
+        }, closed ? 'Shut' : s.lastDriveByDay === s.day ? 'One drive-by a night' : '🔥 Drive-by on their HQ'),
+      ));
+    }
   };
   onShop((r) => { if (r !== 'live') render(); });
   render();

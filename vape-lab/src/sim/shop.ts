@@ -8,6 +8,7 @@
 import { COMMISSION_GREAT, COMMISSION_OK, makeBrief, scoreCommission, type Commission, type Want } from './commission';
 import { distance, haulDays, type CityLocation } from './city';
 import { faultChance, unitCost } from './cost';
+import { BANKRUPT_AT, isCrackdown, shareFootfall, shareOf, turfTick, type Turf } from './turf';
 import { productId } from './id';
 import { deriveSeed, mulberry32, rngPick, rngRange, type Rng } from './rng';
 import { runTest } from './test';
@@ -127,6 +128,14 @@ export interface Rival {
   closedUntil: number;
   /** How much they want revenge on you. */
   grudge: number;
+  /** Every store they run, HQ (loc) included. */
+  stores: string[];
+  /** How good their shops are (0-1). */
+  strength: number;
+  priceWarUntil?: number;
+  lastExpandDay?: number;
+  /** Days each branch has been struggling. */
+  lowDays?: Record<string, number>;
 }
 
 export interface PendingReturn {
@@ -185,6 +194,15 @@ export interface ShopState {
   /** Shut for this day (raid, arrest, firebomb). */
   closedDay?: number;
   closedReason?: string;
+  // --- Turf war ---
+  /** Market share per district per owner (see sim/turf.ts). */
+  turf?: Turf;
+  /** District -> last day of a police crackdown. */
+  crackdowns?: Record<string, number>;
+  /** Extra stores you run (from the Large store). */
+  branches?: string[];
+  /** The day you took the city. */
+  wonDay?: number;
 }
 
 function clone<T>(v: T): T {
@@ -204,9 +222,9 @@ export function newShop(seed: number, name = 'My Vape Store'): ShopState {
     listings: [],
     regulars: [],
     rivals: [
-      { id: 'cloud_kings', name: 'Cloud Kings', colour: '#ff5a5a', aggression: 0.8, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.cloud_kings, closedUntil: 0, grudge: 0 },
-      { id: 'mist_co', name: 'Mist & Co.', colour: '#5ad7ff', aggression: 0.5, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.mist_co, closedUntil: 0, grudge: 0 },
-      { id: 'puff_palace', name: 'Puff Palace', colour: '#ffb020', aggression: 0.3, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.puff_palace, closedUntil: 0, grudge: 0 },
+      { id: 'cloud_kings', name: 'Cloud Kings', colour: '#ff5a5a', aggression: 0.8, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.cloud_kings, closedUntil: 0, grudge: 0, stores: [RIVAL_LOCS.cloud_kings], strength: 0.7 },
+      { id: 'mist_co', name: 'Mist & Co.', colour: '#5ad7ff', aggression: 0.5, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.mist_co, closedUntil: 0, grudge: 0, stores: [RIVAL_LOCS.mist_co], strength: 0.6 },
+      { id: 'puff_palace', name: 'Puff Palace', colour: '#ffb020', aggression: 0.3, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.puff_palace, closedUntil: 0, grudge: 0, stores: [RIVAL_LOCS.puff_palace], strength: 0.5 },
     ],
     pendingReturns: [],
     history: [],
@@ -224,6 +242,7 @@ export function newShop(seed: number, name = 'My Vape Store'): ShopState {
 }
 
 const RIVAL_LOCS: Record<string, string> = { cloud_kings: 'cbd', mist_co: 'mall', puff_palace: 'beach' };
+const RIVAL_STRENGTH: Record<string, number> = { cloud_kings: 0.7, mist_co: 0.6, puff_palace: 0.5 };
 
 /** Upgrade older saves. A v1 shop was already a small store. */
 export function migrateShop(raw: unknown): ShopState {
@@ -232,7 +251,11 @@ export function migrateShop(raw: unknown): ShopState {
     upgrades: s.upgrades ?? [], commissions: s.commissions ?? [], nextCommissionId: s.nextCommissionId ?? 1,
     home: s.home ?? 'suburbs', car: s.car ?? 'suburbs', heat: s.heat ?? 0, kidBuzz: s.kidBuzz ?? 0, lastDriveByDay: s.lastDriveByDay ?? 0,
     store: s.store ?? ((s.tier ?? 2) >= 2 ? 'market' : undefined),
-    rivals: (s.rivals ?? []).map((r) => ({ ...r, loc: r.loc ?? RIVAL_LOCS[r.id] ?? 'cbd', closedUntil: r.closedUntil ?? 0, grudge: r.grudge ?? 0 })),
+    rivals: (s.rivals ?? []).map((r) => {
+      const loc = r.loc ?? RIVAL_LOCS[r.id] ?? 'cbd';
+      return { ...r, loc, closedUntil: r.closedUntil ?? 0, grudge: r.grudge ?? 0, stores: r.stores ?? [loc], strength: r.strength ?? RIVAL_STRENGTH[r.id] ?? 0.55 };
+    }),
+    branches: s.branches ?? [], crackdowns: s.crackdowns ?? {},
   };
   if (s.version === 2) return { ...(s as ShopState), ...extras };
   return { ...(s as ShopState), ...extras, version: 2, tier: 2, pendingReturns: [] };
@@ -583,7 +606,7 @@ export interface Outcome {
 
 export type DayEventKind =
   | 'delivery' | 'stockout' | 'regular_join' | 'regular_leave' | 'caught' | 'knockoff' | 'suspicious' | 'restock'
-  | 'broke' | 'return' | 'fine' | 'id_refused' | 'theft' | 'good_advice' | 'commission';
+  | 'broke' | 'return' | 'fine' | 'id_refused' | 'theft' | 'good_advice' | 'commission' | 'turf' | 'win' | 'bankrupt';
 
 export interface DayEvent {
   kind: DayEventKind;
@@ -611,6 +634,8 @@ export interface DaySession {
 
 export interface DayReport {
   day: number;
+  branchRevenue: number;
+  branchCosts: number;
   closed?: string;
   heatStart: number;
   heatEnd: number;
@@ -697,14 +722,16 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
   shop.kidBuzz = Math.max(0, shop.kidBuzz - 1);
   for (const r of shop.rivals) r.grudge = round2(r.grudge * 0.9);
   const heat = shop.heat / 100;
-  const police = here?.police ?? 0.5;
+  const police = (here?.police ?? 0.5) * (isCrackdown(shop, here?.id) ? 1.6 : 1);
 
   // Police: the hotter you are, the likelier a bust. Worst when you're selling from a car.
   let closed: string | undefined = shop.closedDay === day ? shop.closedReason : undefined;
   if (!closed) {
-    const bustChance = tier.id === 'car' || tier.id === 'garage' ? police * (0.01 + heat ** 1.5 * 0.45) : police * heat ** 1.5 * 0.3;
+    // During a crackdown, police raid big sellers whatever their heat.
+    const crackdown = isCrackdown(shop, here?.id) ? police * 0.05 : 0;
+    const bustChance = (tier.id === 'car' || tier.id === 'garage' ? police * (0.01 + heat ** 1.5 * 0.45) : police * heat ** 1.5 * 0.2) + crackdown;
     if (rng() < bustChance) {
-      const fine = 120 + 80 * shop.tier;
+      const fine = shop.tier <= 1 ? 120 + 80 * shop.tier : 150 + 50 * shop.tier;
       const lose = tier.id === 'car' ? 1 : tier.id === 'garage' ? 0.5 : 0.4;
       let lost = 0;
       for (const l of shop.listings) {
@@ -765,10 +792,8 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
     };
   }
 
-  // Open rival stores nearby take a small slice of passing trade.
-  for (const r of shop.rivals) {
-    if (r.closedUntil < day && distance(cityLoc(data, r.loc), here) < 25) footfallMul *= 0.93;
-  }
+  // Your market share in this district decides how many people come your way.
+  footfallMul *= shareFootfall(shareOf(shop, data, here?.id));
 
   const visitors: Omit<Visitor, 'idx'>[] = [];
   const base = (): Pick<Visitor, 'look' | 'age' | 'looksYoung'> => ({ look: rngPick(rng, LOOKS), age: 25 + Math.floor(rng() * 40), looksYoung: false });
@@ -1475,7 +1500,9 @@ export function endDay(input: DaySession, data: GameData): { shop: ShopState; re
 
   const wages = tier.rivals || tier.shoplift > 0 ? VIGILANCE[shop.vigilance].wage : 0;
   const rent = round1(tier.rent * (shop.tier >= 2 ? cityLoc(data, shop.store)?.rent ?? 1 : 1) + (shop.stash ? 10 : 0));
-  shop.cash = round2(shop.cash + s.revenue - s.refunds - s.fines - wages - rent);
+  const turfDay = turfTick(shop, data, s.day, s.events);
+  const branchNet = turfDay.branchRevenue - turfDay.branchRent - turfDay.branchFines;
+  shop.cash = round2(shop.cash + s.revenue - s.refunds - s.fines - wages - rent + branchNet);
   shop.spentSinceOpen = 0;
   // Word of mouth fades: reputation drifts back toward 50 unless you keep earning it.
   const rest = 50 + perk(shop, 'repRest');
@@ -1492,7 +1519,8 @@ export function endDay(input: DaySession, data: GameData): { shop: ShopState; re
       if (got > 0) s.events.push({ kind: 'restock', text: `Auto-ordered ${got} × ${l.product.brand.name} (${round2(before - next.cash)} cr).` });
     }
   });
-  if (next.cash < 0) s.events.push({ kind: 'broke', text: 'You\'re in debt. Cut costs or raise prices.' });
+  if (next.cash < BANKRUPT_AT) s.events.push({ kind: 'bankrupt', text: `You're more than ${-BANKRUPT_AT} cr in debt. The business has gone under.` });
+  else if (next.cash < 0) s.events.push({ kind: 'broke', text: 'You\'re in debt. Cut costs or raise prices.' });
 
   const report: DayReport = {
     day: s.day,
@@ -1505,7 +1533,9 @@ export function endDay(input: DaySession, data: GameData): { shop: ShopState; re
     wages,
     rent,
     restockSpend: s.restockSpend,
-    profit: round2(s.revenue - s.refunds - s.fines - wages - rent - s.restockSpend),
+    profit: round2(s.revenue - s.refunds - s.fines - wages - rent - s.restockSpend + branchNet),
+    branchRevenue: turfDay.branchRevenue,
+    branchCosts: round2(turfDay.branchRent + turfDay.branchFines),
     closed: s.closed,
     heatStart: input.shop.heat,
     heatEnd: next.heat,
@@ -1543,16 +1573,24 @@ export interface Forecast {
   returnsPerDay: number;
 }
 
+/** A copy of your shop for trial runs: same place, level, reputation, upgrades, rivals and turf. */
+function trialShop(shop: ShopState, salt: string): ShopState {
+  const base = clone(shop);
+  return {
+    ...newShop(deriveSeed(shop.seed, salt)),
+    tier: base.tier, reputation: base.reputation, upgrades: base.upgrades ?? [], cash: 1e9,
+    home: base.home, car: base.car, stash: base.stash, store: base.store,
+    rivals: base.rivals, turf: base.turf, crackdowns: base.crackdowns, heat: 0,
+  };
+}
+
 /**
  * How a product would do on its own in your current shop: a short trial run of
- * the real day sim (same tier, reputation and upgrades; no rivals), with staff
- * making the cautious choices. Deterministic for a given product and shop.
+ * the real day sim (same place, level, reputation, upgrades, rivals and turf),
+ * with staff making the cautious choices. Deterministic for a given product and shop.
  */
 export function forecast(product: Product, shop: ShopState, data: GameData, days = 5): Forecast {
-  let t: ShopState = {
-    ...newShop(deriveSeed(shop.seed, `forecast:${product.id}:${product.brand.price}`)),
-    tier: shop.tier, reputation: shop.reputation, upgrades: [...(shop.upgrades ?? [])], cash: 1e9, rivals: [],
-  };
+  let t: ShopState = trialShop(shop, `forecast:${product.id}:${product.brand.price}`);
   t = addListing(t, product, data);
   t.listings[0].price = product.brand.price;
   t.listings[0].stock = 9999;
@@ -1572,5 +1610,49 @@ export function forecast(product: Product, shop: ShopState, data: GameData, days
     revenuePerDay: round1(revenue / days),
     profitPerDay: round1((revenue - refunds - units * cost) / days),
     returnsPerDay: round1(returns / days),
+  };
+}
+
+export interface PlaceForecast {
+  profitPerDay: number;
+  visitorsPerDay: number;
+  restockDays: number;
+  bustRisk: 'low' | 'medium' | 'high';
+}
+
+/**
+ * What your current range would earn if you sold from somewhere else: the car
+ * at the car boot, your store after that. Five days of the real sim, after
+ * rent, wages and the cost of the stock sold.
+ */
+export function forecastAt(shop: ShopState, data: GameData, locId: string, days = 5): PlaceForecast {
+  let t = trialShop(shop, `place:${locId}`);
+  if (t.tier === 0) t.car = locId;
+  else if (t.tier >= 2) t.store = locId;
+  for (const l of shop.listings) {
+    t = addListing(t, l.product, data);
+    const n = t.listings[t.listings.length - 1];
+    n.price = l.price;
+    n.stock = 9999;
+  }
+  let profit = 0, visitors = 0;
+  for (let i = 0; i < days; i++) {
+    const { shop: next, report } = simulateDay(t, data);
+    let goods = 0;
+    for (const [pid, n] of Object.entries(report.sales)) {
+      const l = next.listings.find((x) => x.product.id === pid);
+      if (l) goods += unitCost(l.product, data).total * n;
+    }
+    profit += report.revenue - report.refunds - report.fines - report.wages - report.rent - goods;
+    visitors += report.visitors;
+    t = next;
+  }
+  const loc = cityLoc(data, locId);
+  const risk = (loc?.police ?? 0.5) * (0.3 + shop.heat / 100);
+  return {
+    profitPerDay: round1(profit / days),
+    visitorsPerDay: round1(visitors / days),
+    restockDays: restockDays(t, data),
+    bustRisk: risk > 0.6 ? 'high' : risk > 0.3 ? 'medium' : 'low',
   };
 }

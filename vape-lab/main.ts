@@ -8,8 +8,9 @@ import { mountFormula } from './src/ui/formula';
 import { mountJournal } from './src/ui/journal';
 import { mountLibrary } from './src/ui/library';
 import { mountAssist, mountAuto, mountModeSwitch } from './src/ui/modes';
-import { mountCityMap, mountCityOverview, mountCityPanel, onPlaceTapped } from './src/ui/city';
-import { mountCounter, mountLedger, mountRegulars, mountRivals, mountShelf, openShop } from './src/ui/shop';
+import { mountCityMap, mountCityOverview, mountCityPanel, mountCityRivals, onPlaceTapped } from './src/ui/city';
+import { showEnding } from './src/ui/ending';
+import { mountCounter, mountLedger, mountRegulars, mountShelf, openShop } from './src/ui/shop';
 import { mountTesting, runTestBatch } from './src/ui/testing';
 import { mountOrders } from './src/ui/orders';
 import { mountTuning } from './src/ui/tuning';
@@ -104,7 +105,6 @@ subscribe(() => labScene.setProduct(state.product));
 const shop = makeView('shop', 'Shelf', [
   { id: 'counter', label: 'Counter', mount: (el) => mountCounter(el) },
   { id: 'regulars', label: 'Regulars', mount: (el) => mountRegulars(el) },
-  { id: 'rivals', label: 'Rivals', mount: (el) => mountRivals(el) },
   { id: 'ledger', label: 'Ledger', mount: (el) => mountLedger(el) },
 ]);
 const shopScene = new ShopScene(shop.stage, data);
@@ -128,17 +128,24 @@ onShop((reason) => {
   if (reason === 'playing' || reason === 'encounter') shop.select('counter');
   if (reason === 'day') {
     shop.select('counter');
-    if (shopState.lastReport?.events.some((e) => e.kind === 'knockoff')) shop.buttons.get('rivals')?.classList.add('badge');
+    const events = shopState.lastReport?.events ?? [];
+    if (events.some((e) => e.kind === 'knockoff' || e.kind === 'turf')) {
+      city.buttons.get('rivals')?.classList.add('badge');
+      viewSeg.querySelector('[data-view="city"]')?.classList.add('badge');
+    }
+    const end = events.find((e) => e.kind === 'win' || e.kind === 'bankrupt');
+    if (end) showEnding(end.kind as 'win' | 'bankrupt', end.text);
   }
 });
-shop.buttons.get('rivals')?.addEventListener('click', () => shop.buttons.get('rivals')?.classList.remove('badge'));
 renderShopTop();
 shopScene.setShop(shopState.shop);
 
 // --- City view --------------------------------------------------------------------------
 const city = makeView('city', 'Place', [
   { id: 'overview', label: 'Overview', mount: (el) => mountCityOverview(el) },
+  { id: 'rivals', label: 'Rivals', mount: (el) => mountCityRivals(el) },
 ]);
+city.buttons.get('rivals')?.addEventListener('click', () => city.buttons.get('rivals')?.classList.remove('badge'));
 mountCityMap(city.stage);
 mountCityPanel(city.left);
 city.mountTabs();
@@ -175,6 +182,7 @@ function setView(v: ViewId): void {
     b.classList.toggle('on', on);
     b.setAttribute('aria-checked', String(on));
   }
+  if (v === 'city') viewSeg.querySelector('[data-view="city"]')?.classList.remove('badge');
   if (v === 'shop') {
     shopScene.setShop(shopState.shop);
     notifyShop('view');

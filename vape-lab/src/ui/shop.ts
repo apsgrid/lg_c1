@@ -1,5 +1,5 @@
 import {
-  addListing, beginDay, buyUpgrade, canMakeOwn, canUpgrade, UPGRADES, upgradeStatus, defaultChoice, endDay, faultChance, intelEstimate, KNOCKOFF_AT, maxOrder, MAX_STOCK,
+  addListing, beginDay, buyUpgrade, canMakeOwn, canUpgrade, UPGRADES, upgradeStatus, defaultChoice, endDay, faultChance, maxOrder, MAX_STOCK,
   nextTier, orderStock, removeListing, resolve, reviseListing, setAutoRestock, setPrice, setVigilance, shelfSlots, step,
   COMMISSION_GREAT, QUEUE_LIMIT, runTest, tierOf, unitCost, upgradeShop, VIGILANCE,
   type DayEventKind, type DaySession, type Product, type ShopState, type Visit,
@@ -389,7 +389,7 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
 
 const EVENT_ICON: Record<DayEventKind, string> = {
   delivery: '📦', stockout: '⚠', regular_join: '★', regular_leave: '☆', caught: '🛑', knockoff: '🕵', suspicious: '👀',
-  restock: '↻', broke: '💸', return: '↩', fine: '⚖', id_refused: '🪪', theft: '🫳', good_advice: '💬', commission: '📜',
+  restock: '↻', broke: '💸', return: '↩', fine: '⚖', id_refused: '🪪', theft: '🫳', good_advice: '💬', commission: '📜', turf: '🗺', win: '👑', bankrupt: '💀',
 };
 
 function visitLine(s: ShopState, v: Visit): string {
@@ -541,41 +541,6 @@ export function mountRegulars(root: HTMLElement): void {
       ));
     }
     if (gone.length) body.append(h('details', {}, h('summary.muted', {}, `${gone.length} former regular${gone.length === 1 ? '' : 's'}`), ...gone.map((r) => h('div.fine', {}, `${r.name} (${archetype(r.archetype)?.name})`))));
-  };
-  onShop((r) => { if (r !== 'live') render(); });
-  render();
-}
-
-// --- Rivals -----------------------------------------------------------------------------
-
-export function mountRivals(root: HTMLElement): void {
-  const body = h('div');
-  root.append(body);
-  const render = () => {
-    clear(body);
-    const s = view();
-    if (!tierOf(s).rivals) {
-      body.append(h('div.empty-state', {}, 'Rival stores don\'t notice a car boot or garage seller. Once you open a Small store, expect secret shoppers.'));
-      return;
-    }
-    body.append(h('p.hint', {}, `Rival stores send secret shoppers who look like everyone else. Watch for nosy questions about your recipes. At ${KNOCKOFF_AT}% knowledge they sell a knock-off. Security catches shoppers; revising a formula in the Lab throws rivals off.`));
-    for (const r of s.rivals) {
-      const rows = s.listings.map((l) => {
-        const est = intelEstimate(s, r, l.product.id);
-        return h('div.intel-row', {},
-          h('span', {}, l.product.brand.name || 'Untitled'),
-          est === null ? h('span.muted.fine', {}, 'unknown') : h('div.intel', {}, bar(est, est >= KNOCKOFF_AT ? 'var(--bad)' : est >= 40 ? 'var(--mid)' : 'var(--good)'), h('span.fine', {}, `~${est}%`)),
-        );
-      });
-      body.append(h('div.rival', { style: `--c:${r.colour}` },
-        h('div.rival-head', {}, h('span.swatch'), h('b', {}, r.name),
-          h('span.fine', {}, `${'●'.repeat(Math.round(r.aggression * 5))}${'○'.repeat(5 - Math.round(r.aggression * 5))} aggression`)),
-        h('div.fine', {}, `Shoppers caught: ${r.caught}${r.bannedUntil >= s.day ? ` · banned until day ${r.bannedUntil}` : ''}`),
-        r.knockoffs.length ? h('div.ko', {}, `Knock-offs: ${r.knockoffs.map((k) => `“${k.name}” (day ${k.day})`).join(', ')}`) : null,
-        h('div.fine.intel-title', {}, s.vigilance ? 'What staff think they know:' : 'Hire security to get intel on what they know.'),
-        s.vigilance ? h('div', {}, ...rows) : null,
-      ));
-    }
   };
   onShop((r) => { if (r !== 'live') render(); });
   render();

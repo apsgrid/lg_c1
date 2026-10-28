@@ -472,3 +472,73 @@ describe('the city', () => {
     expect(attacks(4)).toBeGreaterThan(attacks(0));
   });
 });
+
+describe('turf war', () => {
+  const range = (s: ShopState) => {
+    let t = s;
+    for (const [n, notes, seed] of [['A', [['strawberry', 40], ['cream', 30]], 1], ['B', [['citrus', 35], ['mint', 25]], 2]] as const) t = addListing(t, product(n, notes as unknown as [string, number][], seed), data);
+    t.listings.forEach((_, i) => { t = orderStock(t, i, 40, data); t.listings[i].autoRestockTo = 40; });
+    return t;
+  };
+
+  it('shares add up to 100 in every district and settle deterministically', async () => {
+    const { turfOf } = await import('../src/sim');
+    const s = range({ ...newShop(4), tier: 2, cash: 5000, store: 'market' });
+    const a = run(s, 10), b = run(s, 10);
+    expect(a.turf).toEqual(b.turf);
+    for (const shares of Object.values(turfOf(a, data))) {
+      expect(Object.values(shares).reduce((x, y) => x + y, 0)).toBeGreaterThan(98);
+      expect(Object.values(shares).reduce((x, y) => x + y, 0)).toBeLessThan(102);
+    }
+  });
+
+  it('you gain share where you trade, and more share means more customers', async () => {
+    const { shareOf, shareFootfall } = await import('../src/sim');
+    const s = run(range({ ...newShop(4), tier: 3, cash: 5000, reputation: 70, store: 'market' }), 20);
+    expect(shareOf(s, data, 'market')).toBeGreaterThan(shareOf(s, data, 'hospital'));
+    expect(shareFootfall(60)).toBeGreaterThan(shareFootfall(20));
+  });
+
+  it('a rival muscling into a crowded district gets less share than in its own', async () => {
+    const { shareOf } = await import('../src/sim');
+    const s = run(range({ ...newShop(4), tier: 3, cash: 5000, store: 'cbd' }), 15);
+    expect(shareOf(s, data, 'cbd', 'cloud_kings')).toBeLessThan(80);
+    expect(shareOf(s, data, 'cbd', 'you')).toBeGreaterThan(5);
+  });
+
+  it('rivals expand once you have a store, but not while you sell from a car', () => {
+    const quiet = run(range({ ...newShop(4), tier: 0, cash: 5000 }), 30);
+    expect(quiet.rivals.every((r) => r.stores.length === 1)).toBe(true);
+    const busy = run(range({ ...newShop(4), tier: 3, cash: 9000, store: 'market' }), 60);
+    expect(busy.rivals.some((r) => r.stores.length > 1)).toBe(true);
+  });
+
+  it('branches open from the Large store and earn money in districts you do well in', async () => {
+    const { openBranch, branchStatus, BRANCH_COST } = await import('../src/sim');
+    const s = range({ ...newShop(4), tier: 3, cash: 9000, store: 'market' });
+    expect(branchStatus(s, 'church').ok).toBe(false);
+    const big = openBranch({ ...s, tier: 4 }, 'church');
+    expect(big.branches).toEqual(['church']);
+    expect(big.cash).toBeCloseTo(s.cash - BRANCH_COST, 2);
+    const r = simulateDay(run(big, 15), data).report;
+    expect(r.branchRevenue).toBeGreaterThan(0);
+  });
+
+  it('leading enough districts wins the city', async () => {
+    const { districtsLed, WIN_DISTRICTS } = await import('../src/sim');
+    // Rivals shut and a spread-out chain: the city falls.
+    let s = range({ ...newShop(4), tier: 5, cash: 50000, reputation: 85, store: 'cbd', branches: ['school', 'beach', 'church', 'hospital'] });
+    s.rivals = s.rivals.map((r) => ({ ...r, closedUntil: 999 }));
+    s = run(s, 25);
+    expect(districtsLed(s, data).length).toBeGreaterThanOrEqual(WIN_DISTRICTS);
+    expect(s.wonDay).toBeGreaterThan(0);
+  });
+
+  it('the shop forecast now depends on where you trade', async () => {
+    const { forecastAt } = await import('../src/sim');
+    const s = range({ ...newShop(4), tier: 3, cash: 9000, store: 'market' });
+    const cbd = forecastAt(s, data, 'cbd'), ind = forecastAt(s, data, 'industrial');
+    expect(cbd.profitPerDay).not.toBe(ind.profitPerDay);
+    expect(['low', 'medium', 'high']).toContain(cbd.bustRisk);
+  });
+});
