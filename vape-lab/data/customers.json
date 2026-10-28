@@ -1,0 +1,141 @@
+[
+  {
+    "id": "fruit_fanatic", "name": "Fruit Fanatic", "avatar": "🍓", "segment": "enthusiast", "baseline": 48,
+    "blurb": "Loves anything fruity, likes it sweet.",
+    "terms": [
+      { "stat": "fam.fruit", "weight": 0.45, "pivot": 30, "label": "fruit" },
+      { "stat": "sweetness", "weight": 0.22, "pivot": 45, "label": "sweet" },
+      { "stat": "richness", "weight": -0.35, "above": 70, "label": "heavy" },
+      { "stat": "cooling", "weight": -0.45, "above": 60, "label": "too_cold" },
+      { "stat": "t.intensity", "weight": 0.12, "pivot": 50, "label": "punchy" }
+    ],
+    "comments": {
+      "fruit+": ["Proper fruit-bowl energy. I'm in.", "Tastes like {note} picked this morning!", "Finally, something that actually tastes like fruit."],
+      "fruit-": ["Where's the fruit? I can't find it.", "Needs way more fruit. This is not my thing.", "Not a single bit of orchard in here."],
+      "sweet+": ["Sweet and juicy, just how I like it.", "Lovely sweetness on the {note}."],
+      "sweet-": ["Too flat. Where's the sweetness?", "Bit dry for me."],
+      "heavy-": ["Way too heavy. Fruit should feel light.", "Feels like eating a pudding, not a fruit."],
+      "too_cold-": ["Brain freeze! I can't taste the fruit through the ice.", "Ice is drowning everything out."],
+      "punchy+": ["Big bold flavour, love it.", "Really punches through."],
+      "punchy-": ["A bit faint for me.", "Could do with turning it up."],
+      "neutral": ["It's fine. Nothing wrong with it.", "Decent, but I've had better."]
+    }
+  },
+  {
+    "id": "anti_sweet", "name": "Anti-Sweet", "avatar": "🧂", "segment": "enthusiast", "baseline": 55,
+    "blurb": "Hates sugar bombs. Wants depth.",
+    "terms": [
+      { "stat": "sweetness", "weight": -0.55, "pivot": 40, "label": "sweet" },
+      { "stat": "complexity", "weight": 0.22, "pivot": 40, "label": "complex" },
+      { "stat": "richness", "weight": 0.15, "pivot": 40, "label": "deep" },
+      { "stat": "balance", "weight": 0.18, "pivot": 60, "label": "balanced" },
+      { "stat": "cooling", "weight": -0.3, "above": 65, "label": "too_cold" }
+    ],
+    "comments": {
+      "sweet+": ["Restrained. Grown-up. Thank you.", "Not a sugar bomb for once. Respect."],
+      "sweet-": ["Way too sweet. My teeth hurt.", "Sugar, sugar, sugar. Pass.", "It's like licking a candy floss machine."],
+      "complex+": ["Layers on layers. The {note} unfolds nicely.", "Interesting. Keeps changing as you go."],
+      "complex-": ["One-note. Boring.", "There's nothing to think about here."],
+      "deep+": ["Nice depth to it.", "Rich without being cloying."],
+      "deep-": ["Thin. Needs body.", "Watery."],
+      "balanced+": ["Everything sits together well.", "Well put together."],
+      "balanced-": ["Messy. Too many things fighting.", "Doesn't hang together."],
+      "too_cold-": ["The ice is a crutch. Tone it down.", "Too cold to tell what's going on."],
+      "neutral": ["Hm. Not offended, not impressed.", "Acceptable."]
+    }
+  },
+  {
+    "id": "ice_fan", "name": "Ice Fan", "avatar": "🧊", "segment": "enthusiast", "baseline": 40,
+    "blurb": "The colder the better.",
+    "terms": [
+      { "stat": "cooling", "weight": 0.45, "pivot": 40, "label": "cold" },
+      { "stat": "cooling", "weight": -0.35, "below": 30, "label": "warm" },
+      { "stat": "t.vapour", "weight": 0.15, "pivot": 50, "label": "cloud" },
+      { "stat": "t.intensity", "weight": 0.1, "pivot": 50, "label": "punchy" }
+    ],
+    "comments": {
+      "cold+": ["ICE COLD. Perfect.", "Like breathing in a glacier. Love it.", "That chill on the {note} is spot on."],
+      "cold-": ["Needs more chill.", "Barely cool. Turn it up."],
+      "warm-": ["It's warm. Why is it warm?", "Zero chill. Not for me.", "Where's the ice?!"],
+      "cloud+": ["Massive clouds, nice.", "Great vapour on this."],
+      "cloud-": ["Wispy. Want more cloud.", "Thin vapour."],
+      "punchy+": ["Hits hard. Good.", "Strong stuff."],
+      "punchy-": ["Weak.", "Needs more kick."],
+      "neutral": ["It's alright.", "Not bad, not great."]
+    }
+  },
+  {
+    "id": "novelty_seeker", "name": "Novelty Seeker", "avatar": "🦄", "segment": "enthusiast", "baseline": 40,
+    "blurb": "Wants something nobody has tried.",
+    "terms": [
+      { "stat": "originality", "weight": 0.5, "pivot": 40, "label": "novel" },
+      { "stat": "complexity", "weight": 0.35, "pivot": 40, "label": "complex" },
+      { "stat": "t.intensity", "weight": 0.12, "pivot": 50, "label": "punchy" },
+      { "stat": "balance", "weight": -0.3, "below": 35, "label": "messy" },
+      { "stat": "cooling", "weight": -0.3, "above": 70, "label": "too_cold" }
+    ],
+    "comments": {
+      "novel+": ["Never had anything like this. Instant favourite.", "Wild combination. I need to tell everyone.", "{note} like this? Genius."],
+      "novel-": ["Seen it a hundred times.", "So generic. Where's the risk?", "My nan's shop sells this."],
+      "complex+": ["So many layers!", "Every puff is different."],
+      "complex-": ["Flat. Give me something to explore.", "Too simple."],
+      "punchy+": ["Bold. Love bold.", "Doesn't hold back."],
+      "punchy-": ["Shy flavour.", "Timid."],
+      "messy-": ["Weird in a bad way. Chaos.", "Too many ideas, none land."],
+      "too_cold-": ["Ice hides the interesting bits.", "Over-iced."],
+      "neutral": ["Interesting-ish.", "I'll give it a maybe."]
+    }
+  },
+  {
+    "id": "budget_buyer", "name": "Budget Buyer", "avatar": "🪙", "segment": "casual", "baseline": 62,
+    "blurb": "Price first, taste second.",
+    "terms": [
+      { "stat": "price", "weight": -1.1, "pivot": 18, "label": "price" },
+      { "stat": "tier.premium", "weight": -0.12, "pivot": 0, "label": "posh" },
+      { "stat": "balance", "weight": 0.2, "pivot": 55, "label": "balanced" },
+      { "stat": "t.smoothness", "weight": 0.18, "pivot": 40, "label": "smooth" },
+      { "stat": "t.intensity", "weight": -0.35, "above": 70, "label": "harsh" },
+      { "stat": "complexity", "weight": -0.3, "above": 65, "label": "confusing" },
+      { "stat": "cooling", "weight": -0.4, "above": 60, "label": "too_cold" }
+    ],
+    "comments": {
+      "price+": ["At that price? Bargain. I'll take three.", "Cheap and cheerful. Sold.", "Great value."],
+      "price-": ["How much?! No chance.", "Way over my budget.", "Lovely, but I'm not paying that."],
+      "posh-": ["Fancy packaging, fancy price. Not for me.", "Bit posh for me."],
+      "balanced+": ["Easy going down.", "Nice and simple."],
+      "balanced-": ["Bit of a mess.", "Tastes confused."],
+      "smooth+": ["Super smooth.", "No harshness at all."],
+      "smooth-": ["Bit rough.", "Scratchy."],
+      "harsh-": ["Too strong, it's harsh.", "Ouch, that's intense."],
+      "confusing-": ["I don't get it.", "Too much going on."],
+      "too_cold-": ["Way too icy for me.", "Freezing."],
+      "neutral": ["Does the job.", "It's fine for the money."]
+    }
+  },
+  {
+    "id": "brand_loyalist", "name": "Brand Loyalist", "avatar": "🏷️", "segment": "casual", "baseline": 50,
+    "blurb": "Sticks with names they trust.",
+    "terms": [
+      { "stat": "familiarity", "weight": 0.4, "pivot": 40, "label": "familiar" },
+      { "stat": "originality", "weight": -0.5, "above": 50, "label": "weird" },
+      { "stat": "t.smoothness", "weight": 0.2, "pivot": 40, "label": "smooth" },
+      { "stat": "balance", "weight": 0.25, "pivot": 55, "label": "balanced" },
+      { "stat": "t.intensity", "weight": -0.3, "above": 70, "label": "harsh" },
+      { "stat": "complexity", "weight": -0.25, "above": 65, "label": "confusing" },
+      { "stat": "cooling", "weight": -0.4, "above": 60, "label": "too_cold" }
+    ],
+    "comments": {
+      "familiar+": ["'{name}', sounds like one I know. Good.", "Feels trustworthy.", "Classic. I'd buy it again."],
+      "familiar-": ["Never heard of '{name}'.", "Doesn't feel like a proper brand.", "Who makes this?"],
+      "weird-": ["Too weird. Give me the usual.", "Why would anyone make this?"],
+      "smooth+": ["Smooth, like my regular.", "Very easy."],
+      "smooth-": ["A bit rough round the edges.", "Not smooth enough."],
+      "balanced+": ["Nicely rounded.", "Solid all-rounder."],
+      "balanced-": ["Doesn't sit right.", "Unbalanced."],
+      "harsh-": ["Too harsh.", "Tone it down."],
+      "confusing-": ["Too complicated.", "What am I tasting?"],
+      "too_cold-": ["Too icy.", "Brrr."],
+      "neutral": ["It's okay.", "Might stick with my usual."]
+    }
+  }
+]

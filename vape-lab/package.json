@@ -1,0 +1,24 @@
+{
+  "name": "vape-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vape Wars: Vape Lab demo - standalone Make-a-Vape minigame with a fictional flavour system",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/three": "0.169.0",
+    "typescript": "5.6.3",
+    "vite": "5.4.10",
+    "vitest": "2.1.4"
+  }
+}

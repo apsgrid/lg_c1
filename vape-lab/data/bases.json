@@ -1,0 +1,23 @@
+[
+  { "id": "fruity", "name": "Fruity", "cost": 2.0, "liquidColour": "#ff9aa8",
+    "offsets": { "sweetness": 6, "tartness": 4 },
+    "appeal": { "fruit_fanatic": 1.25, "anti_sweet": 0.85, "ice_fan": 1.0, "novelty_seeker": 0.9, "budget_buyer": 1.05, "brand_loyalist": 1.0 } },
+  { "id": "dessert", "name": "Dessert", "cost": 2.4, "liquidColour": "#f2d9a6",
+    "offsets": { "richness": 8, "sweetness": 4, "cooling": -4 },
+    "appeal": { "fruit_fanatic": 0.85, "anti_sweet": 0.9, "ice_fan": 0.8, "novelty_seeker": 1.0, "budget_buyer": 1.0, "brand_loyalist": 1.15 } },
+  { "id": "candy", "name": "Candy", "cost": 1.8, "liquidColour": "#ffb6e6",
+    "offsets": { "sweetness": 10, "complexity": -4 },
+    "appeal": { "fruit_fanatic": 1.05, "anti_sweet": 0.7, "ice_fan": 0.95, "novelty_seeker": 0.95, "budget_buyer": 1.15, "brand_loyalist": 1.0 } },
+  { "id": "beverage", "name": "Beverage", "cost": 2.2, "liquidColour": "#d9a46b",
+    "offsets": { "complexity": 5, "tartness": 2 },
+    "appeal": { "fruit_fanatic": 0.95, "anti_sweet": 1.05, "ice_fan": 1.0, "novelty_seeker": 1.1, "budget_buyer": 1.0, "brand_loyalist": 1.05 } },
+  { "id": "botanical", "name": "Botanical", "cost": 2.8, "liquidColour": "#b9e2a0",
+    "offsets": { "complexity": 10, "sweetness": -6, "originality": 6 },
+    "appeal": { "fruit_fanatic": 0.85, "anti_sweet": 1.25, "ice_fan": 0.95, "novelty_seeker": 1.3, "budget_buyer": 0.8, "brand_loyalist": 0.8 } },
+  { "id": "menthol_ice", "name": "Menthol/Ice", "cost": 2.0, "liquidColour": "#bdf3ff",
+    "offsets": { "cooling": 22, "sweetness": -3 },
+    "appeal": { "fruit_fanatic": 0.95, "anti_sweet": 1.05, "ice_fan": 1.4, "novelty_seeker": 0.9, "budget_buyer": 0.95, "brand_loyalist": 0.95 } },
+  { "id": "tobacco_style", "name": "Tobacco-style", "cost": 2.3, "liquidColour": "#a8743d",
+    "offsets": { "richness": 10, "sweetness": -8, "complexity": 4 },
+    "appeal": { "fruit_fanatic": 0.7, "anti_sweet": 1.2, "ice_fan": 0.85, "novelty_seeker": 0.9, "budget_buyer": 1.0, "brand_loyalist": 1.3 } }
+]

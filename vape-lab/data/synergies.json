@@ -1,0 +1,14 @@
+[
+  { "id": "bakery_dessert", "name": "Smooth Dessert", "needs": ["cream", "vanilla_custard"],
+    "bonus": { "richness": 12, "balance": 6 }, "hint": "Customers call it 'smooth and bakery-like'" },
+  { "id": "refreshing_citrus", "name": "Refreshing Citrus", "needs": ["citrus", "mint|base:menthol_ice"],
+    "bonus": { "cooling": 8, "balance": 8, "originality": 4 }, "hint": "Testers say it's 'like a cold glass of juice on a hot day'" },
+  { "id": "rich_roast", "name": "Rich Roast", "needs": ["caramel", "coffee"],
+    "bonus": { "richness": 14, "complexity": 6 }, "hint": "Panel describes it as 'rich, roasted and indulgent'" },
+  { "id": "fruity_dessert", "name": "Fruity Dessert", "needs": ["strawberry", "cream"],
+    "bonus": { "sweetness": 4, "balance": 10, "richness": 4 }, "hint": "People keep calling it 'a smooth fruity dessert'" },
+  { "id": "icing_tang", "name": "Icing Tang", "needs": ["vanilla_custard", "tag:tart"],
+    "bonus": { "complexity": 10, "originality": 8, "balance": 4 }, "hint": "Someone said 'it's like the tangy icing on a cake'" },
+  { "id": "fizzy_soda", "name": "Fizzy Soda", "needs": ["cola", "lemonade"],
+    "bonus": { "tartness": 4, "originality": 10, "balance": 6 }, "hint": "Feedback: 'fizzy, like a soda-fountain mix'" }
+]
