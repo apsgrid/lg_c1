@@ -15,7 +15,7 @@ const stage = h('div.stage');
 const left = h('aside.panel.left');
 const right = h('aside.panel.right');
 const top = h('header.topbar', {},
-  h('div.brand-mark', {}, h('span.logo-dot'), h('b', {}, 'Vape Lab'), h('span.muted', {}, ' · Vape Wars demo')),
+  h('div.brand-mark', {}, h('span.logo-dot'), h('b', {}, 'Vape Lab'), h('span.muted.sub', {}, ' · Vape Wars demo')),
 );
 const modeHost = h('div.mode-host');
 top.append(modeHost, h('button.primary.test-top', { onclick: () => void runTestBatch(), title: 'Shortcut: T' }, 'Test batch'));
@@ -27,8 +27,10 @@ const scene = new LabScene(stage, data);
 mountFormula(left, scene);
 mountAssist(left);
 
-// Right: tabbed panels.
+// Right: tabbed panels. On phones the formula panel becomes the "Mix" tab.
+const phone = window.matchMedia('(max-width: 860px)');
 const TABS = [
+  { id: 'mix', label: 'Mix', mount: (_el: HTMLElement) => undefined },
   { id: 'tune', label: 'Tune', mount: (el: HTMLElement) => mountTuning(el) },
   { id: 'brand', label: 'Brand', mount: (el: HTMLElement) => mountBranding(el) },
   { id: 'test', label: 'Test', mount: (el: HTMLElement) => mountTesting(el, scene) },
@@ -38,10 +40,10 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
-const tabBar = h('nav.tabs', { role: 'tablist' });
+const tabBar = h('nav.tabs', { role: 'tablist', 'aria-label': 'Lab panels' });
 const bodies = new Map<TabId, HTMLElement>();
 const buttons = new Map<TabId, HTMLButtonElement>();
-right.append(tabBar);
+app.append(tabBar);
 for (const t of TABS) {
   const btn = h('button.tab', { role: 'tab', onclick: () => select(t.id) }, t.label);
   const body = h('section.tab-body', { role: 'tabpanel' });
@@ -52,7 +54,11 @@ for (const t of TABS) {
   buttons.set(t.id, btn);
 }
 
+let current: TabId = 'tune';
 function select(id: TabId): void {
+  if (id === 'mix' && !phone.matches) id = 'tune';
+  current = id;
+  app.classList.toggle('show-mix', id === 'mix');
   for (const [k, el] of bodies) el.hidden = k !== id;
   for (const [k, b] of buttons) {
     b.classList.toggle('on', k === id);
@@ -60,9 +66,10 @@ function select(id: TabId): void {
   }
   try { localStorage.setItem('vapelab.v1.tab', id); } catch { /* ignore */ }
 }
-let initial: TabId = 'tune';
-try { initial = (localStorage.getItem('vapelab.v1.tab') as TabId) || 'tune'; } catch { /* ignore */ }
+let initial: TabId = phone.matches ? 'mix' : 'tune';
+try { initial = (localStorage.getItem('vapelab.v1.tab') as TabId) || initial; } catch { /* ignore */ }
 select(bodies.has(initial) ? initial : 'tune');
+phone.addEventListener('change', () => select(current));
 
 mountModeSwitch(modeHost, () => select('auto'));
 

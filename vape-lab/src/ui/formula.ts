@@ -3,6 +3,7 @@ import { data, state, subscribe, update } from '../state';
 import type { LabScene } from '../view/scene';
 import { clear, h } from './dom';
 import { RadarChart } from './radar';
+import { toast } from './toast';
 
 /** Put a note into a slot (or the first free one). Existing copies move instead of duplicating. */
 export function placeNote(noteId: string, slotIndex?: number): void {
@@ -27,7 +28,7 @@ export function mountFormula(root: HTMLElement, scene: LabScene): void {
   root.append(
     h('h3', {}, 'Base'),
     baseRow,
-    h('h3', {}, 'Notes ', h('span.muted', {}, '(drag bottles from the shelf, max 4)')),
+    h('h3', {}, 'Notes ', h('span.muted', {}, '(tap or drag bottles from the shelf, max 4)')),
     slotsEl,
     totalEl,
     h('h3', {}, 'Flavour profile'),
@@ -76,7 +77,13 @@ export function mountFormula(root: HTMLElement, scene: LabScene): void {
       document.body.classList.remove('dragging');
       for (const s of slotsEl.querySelectorAll('.slot')) s.classList.remove('drop-over');
       if (!moved) {
-        placeNote(noteId); // click = add to first free slot
+        // Tap/click = add to the first free slot.
+        const inMix = state.product.notes.some((n) => n.noteId === noteId);
+        if (!inMix && state.product.notes.length >= MAX_SLOTS) toast('All 4 slots are full. Remove a note first.');
+        else if (!inMix) {
+          placeNote(noteId);
+          toast(`Added ${def.name}`);
+        }
         return;
       }
       ghost.style.display = 'none';

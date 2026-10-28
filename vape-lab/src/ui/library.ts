@@ -16,7 +16,19 @@ export function mountLibrary(root: HTMLElement): void {
     h('details.danger', {},
       h('summary', {}, 'Reset'),
       h('p.fine', {}, 'Clears saved formulas, discovered synergies and test history from this browser.'),
-      h('button.ghost', { onclick: () => { if (confirm('Reset all Vape Lab data?')) { storage.resetAll(); location.reload(); } } }, 'Reset all lab data'),
+      h('button.ghost', {
+        onclick: (e: Event) => {
+          const btn = e.currentTarget as HTMLButtonElement;
+          if (btn.dataset.armed) {
+            storage.resetAll();
+            location.reload();
+            return;
+          }
+          btn.dataset.armed = '1';
+          btn.textContent = 'Tap again to reset everything';
+          setTimeout(() => { delete btn.dataset.armed; btn.textContent = 'Reset all lab data'; }, 4000);
+        },
+      }, 'Reset all lab data'),
     ),
   );
 

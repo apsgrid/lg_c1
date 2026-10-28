@@ -7,6 +7,8 @@ export function toast(text: string, kind: 'info' | 'gold' = 'info'): void {
     host = h('div.toasts', { 'aria-live': 'polite' });
     document.body.append(host);
   }
+  // Keep at most two on screen so they never bury the panel.
+  while (host.childElementCount >= 2) host.firstElementChild?.remove();
   const t = h('div.toast', { class: kind }, text);
   host.append(t);
   setTimeout(() => t.classList.add('out'), 3200);
