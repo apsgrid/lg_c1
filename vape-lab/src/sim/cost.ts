@@ -21,12 +21,24 @@ export function unitCost(product: Product, data: GameData): CostBreakdown {
   const tuning = t.vapour * 0.012 + t.cooling * 0.008 + t.intensity * 0.006;
   const mul = TIER_MULTIPLIER[product.brand.tier];
   const packaging = PACK_COST[product.brand.style] * (product.brand.tier === 'premium' ? 1.3 : 1);
-  const total = (base + notes + tuning) * mul + packaging;
+  // Disposables are built cheap: half the build cost, flimsier packaging.
+  const f = product.brand.format === 'disposable' ? 0.5 : 1;
+  const total = ((base + notes + tuning) * mul + packaging) * f;
   return {
-    base: round2(base * mul),
-    notes: round2(notes * mul),
-    tuning: round2(tuning * mul),
-    packaging: round2(packaging),
+    base: round2(base * mul * f),
+    notes: round2(notes * mul * f),
+    tuning: round2(tuning * mul * f),
+    packaging: round2(packaging * f),
     total: round2(total),
   };
+}
+
+const FAULT_RATE: Record<'refillable' | 'disposable', Record<Tier, number>> = {
+  refillable: { budget: 0.03, standard: 0.015, premium: 0.008 },
+  disposable: { budget: 0.2, standard: 0.12, premium: 0.06 },
+};
+
+/** Chance (0-1) that one unit turns out faulty and comes back. */
+export function faultChance(product: Product): number {
+  return FAULT_RATE[product.brand.format ?? 'refillable'][product.brand.tier];
 }

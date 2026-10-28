@@ -26,14 +26,22 @@ npm run build:single  # one self-contained dist/vape-lab.html (used for the phon
 
 Switch from **Lab** to **Shop** in the top bar.
 
-- **Shelf** (left panel, or the Shelf tab on phones): name your shop and put up to 6 saved products on the shelf. Set each shelf price and order stock. Orders are paid now and arrive next morning, and you can set an auto-restock level for each product.
-- **Open day N**: the day plays out in 3D. Walk-ins are the six panel customer types and buy with the same scoring as the lab test. Regulars (star badge) come back on their own.
-- **Today**: takings, profit, reputation, events, sales and a visitor log. Odd behaviour ("took photos of the shelf") may be a rival's secret shopper, or may be nothing.
-- **Regulars**: loyalty rises when their favourite is in stock and they like it. If it sells out they drift away.
-- **Rivals**: Cloud Kings, Mist & Co. and Puff Palace send disguised secret shoppers who learn your formulas. Once a rival knows 70% of a formula, they launch a knock-off that drags sales and reputation. Security staff catch shoppers and estimate what rivals know. Revising a formula in the Lab and choosing "Use revised formula" on the shelf leaves rivals with only 40% of their knowledge.
-- **Ledger**: cash and daily profit over time.
+**Progression.** You start selling from the boot of your car, then move up: Garage → Small store → Medium store → Large store → Premium boutique. Each move costs cash and needs a minimum reputation. Bigger shops have more product slots, more customers and room for more regulars, but higher rent. Rival stores only notice you from the Small store on, and shoplifters start at the Garage. Premium boutique customers favour premium-tier products.
 
-The day sim lives in `src/sim/shop.ts`. It is pure and seeded like the rest of `sim/`, so the same shop state always plays the same day.
+**Serving.** Press **Open up** and customers come in one at a time. Most browse and buy on their own; some stop at the counter:
+- **Advice:** "Got anything really icy?" Pick a product. A good match earns reputation and loyalty and may win a regular; a poor one loses the sale.
+- **ID checks:** a customer looks young. Ask for ID, or serve them. Selling to a minor costs a fine and a big reputation hit.
+- **Returns:** a faulty unit comes back. Refund it, swap it for a new one, or refuse (keeps the cash, hurts reputation and loyalty).
+- **Nosy questions:** "What exactly goes into this one?" Genuine fans love hearing about it, but it might be a rival's secret shopper taking notes.
+- **Shoplifters:** something goes missing and you choose who to stop out of three customers. Stopping the right one recovers the stock; stopping the wrong one loses reputation. A security guard points out the thief.
+
+**Skip** hands the rest of the day to your staff, who make the cautious choice each time.
+
+**Disposables.** Set a product's format in the Lab's Brand tab. Disposables cost half as much to make, so margins are high, but far more of them are faulty (20% at budget tier, 12% at standard, 6% at premium) and come back as returns over the next couple of days.
+
+**Other tabs:** Regulars (loyalty and favourites), Rivals (knock-offs and what security thinks rivals know), Ledger (cash and daily profit).
+
+The day sim lives in `src/sim/shop.ts`. It is pure and seeded: `beginDay` lines up the visitors, `step` serves the next one or returns an encounter, `resolve` applies your choice, and `endDay` closes up. `simulateDay` plays a whole day with a choice policy and is used by the tests.
 
 ## Layout
 

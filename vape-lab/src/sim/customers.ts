@@ -34,6 +34,7 @@ export function statValue(stat: string, ctx: ScoreContext): number {
   if (stat.startsWith('fam.')) return ctx.familyShare[stat.slice(4) as Family] ?? 0;
   if (stat === 'price') return ctx.product.brand.price;
   if (stat === 'tier.premium') return ctx.product.brand.tier === 'premium' ? 100 : 0;
+  if (stat === 'format.disposable') return ctx.product.brand.format === 'disposable' ? 100 : 0;
   if (stat === 'familiarity') return ctx.familiarity;
   return ctx.profile[stat as keyof Profile] ?? 0;
 }

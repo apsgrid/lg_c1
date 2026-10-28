@@ -91,8 +91,13 @@ export interface NoteSlot {
   amount: number;              // 0-100 game points
 }
 
+export type Format = 'refillable' | 'disposable';
+export const FORMATS: Format[] = ['refillable', 'disposable'];
+
 export interface Brand {
   name: string;
+  /** Missing on older saves: treated as refillable. */
+  format?: Format;
   labelColour: string;
   style: PackStyle;
   logo: Logo;

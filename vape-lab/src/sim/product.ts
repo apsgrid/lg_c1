@@ -8,7 +8,7 @@ export function newProduct(seed = 1): Product {
     base: 'fruity',
     notes: [],
     tuning: { ...DEFAULT_TUNING },
-    brand: { name: 'Classic Cloud', labelColour: '#3a6df0', style: 'classic', logo: 'drop', tier: 'standard', price: 14 },
+    brand: { name: 'Classic Cloud', format: 'refillable', labelColour: '#3a6df0', style: 'classic', logo: 'drop', tier: 'standard', price: 14 },
     seed,
   };
   p.id = productId(p);

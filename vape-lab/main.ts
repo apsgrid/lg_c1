@@ -7,7 +7,7 @@ import { mountFormula } from './src/ui/formula';
 import { mountJournal } from './src/ui/journal';
 import { mountLibrary } from './src/ui/library';
 import { mountAssist, mountAuto, mountModeSwitch } from './src/ui/modes';
-import { mountLedger, mountRegulars, mountRivals, mountShelf, mountToday, openShop } from './src/ui/shop';
+import { mountCounter, mountLedger, mountRegulars, mountRivals, mountShelf, openShop } from './src/ui/shop';
 import { mountTesting, runTestBatch } from './src/ui/testing';
 import { mountTuning } from './src/ui/tuning';
 import { LabScene } from './src/view/scene';
@@ -97,7 +97,7 @@ subscribe(() => labScene.setProduct(state.product));
 
 // --- Shop view ------------------------------------------------------------------------
 const shop = makeView('shop', 'Shelf', [
-  { id: 'today', label: 'Today', mount: (el) => mountToday(el) },
+  { id: 'counter', label: 'Counter', mount: (el) => mountCounter(el) },
   { id: 'regulars', label: 'Regulars', mount: (el) => mountRegulars(el) },
   { id: 'rivals', label: 'Rivals', mount: (el) => mountRivals(el) },
   { id: 'ledger', label: 'Ledger', mount: (el) => mountLedger(el) },
@@ -110,14 +110,16 @@ const cashChip = h('span.cash-chip');
 shopTools.append(cashChip, openTop);
 const renderShopTop = () => {
   const s = shopState.shop;
-  openTop.textContent = shopState.playing ? 'Skip' : `Open day ${s.day}`;
+  openTop.textContent = shopState.playing ? 'Skip day' : `Open day ${s.day}`;
   cashChip.textContent = `${Math.round(s.cash)} cr`;
   cashChip.classList.toggle('bad', s.cash < 0);
 };
 onShop((reason) => {
   renderShopTop();
+  app.classList.toggle('encounter-open', !!shopState.encounter);
+  if (reason === 'playing' || reason === 'encounter') shop.select('counter');
   if (reason === 'day') {
-    shop.select('today');
+    shop.select('counter');
     if (shopState.lastReport?.events.some((e) => e.kind === 'knockoff')) shop.buttons.get('rivals')?.classList.add('badge');
   }
 });

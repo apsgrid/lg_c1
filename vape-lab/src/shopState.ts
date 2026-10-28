@@ -1,12 +1,11 @@
-import { data } from './state';
-import { newShop, simulateDay, type DayReport, type ShopState } from './sim';
+import { migrateShop, newShop, type DayReport, type Encounter, type Outcome, type ShopState, type Visit } from './sim';
 
 const KEY = 'vapelab.v1.shop';
 
 function load(): ShopState {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as ShopState;
+    if (raw) return migrateShop(JSON.parse(raw));
   } catch {
     /* fall through */
   }
@@ -17,6 +16,12 @@ export const shopState = {
   shop: load(),
   lastReport: null as DayReport | null,
   playing: false,
+  /** Shop as it stands mid-day (stock, cash in the till) while a day is running. */
+  live: null as ShopState | null,
+  liveVisits: [] as Visit[],
+  liveRevenue: 0,
+  encounter: null as Encounter | null,
+  outcome: null as (Outcome & { who: string }) | null,
 };
 
 type Sub = (reason: string) => void;
@@ -25,7 +30,7 @@ export function onShop(fn: Sub): void {
   subs.add(fn);
 }
 
-function save(): void {
+export function saveShop(): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(shopState.shop));
   } catch {
@@ -37,34 +42,18 @@ export function notifyShop(reason: string): void {
   for (const fn of subs) fn(reason);
 }
 
-/** Apply a pure shop action and persist. */
+/** Apply a pure shop action and persist. Ignored while a day is running. */
 export function shopAction(fn: (s: ShopState) => ShopState, reason = 'shop'): void {
+  if (shopState.playing) return;
   shopState.shop = fn(shopState.shop);
-  save();
+  saveShop();
   notifyShop(reason);
-}
-
-/** Simulate the day now (so it's saved even if the tab closes), but show it only after playback. */
-export function runDay(): { report: DayReport; reveal: () => void } {
-  const before = shopState.shop;
-  const { shop, report } = simulateDay(before, data);
-  try {
-    localStorage.setItem(KEY, JSON.stringify(shop));
-  } catch {
-    /* ignore */
-  }
-  return {
-    report,
-    reveal: () => {
-      shopState.shop = shop;
-      shopState.lastReport = report;
-    },
-  };
 }
 
 export function resetShop(): void {
   shopState.shop = newShop(Math.floor(Math.random() * 1e9), shopState.shop.name);
   shopState.lastReport = null;
-  save();
+  saveShop();
   notifyShop('reset');
 }
+

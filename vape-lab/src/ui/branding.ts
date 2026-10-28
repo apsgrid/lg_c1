@@ -1,4 +1,4 @@
-import { LOGOS, PACK_STYLES, TIERS, unitCost, type Logo } from '../sim';
+import { faultChance, FORMATS, LOGOS, PACK_STYLES, TIERS, unitCost, type Logo } from '../sim';
 import { data, state, subscribe, update } from '../state';
 import { drawLabel, drawLogo } from '../view/label';
 import { clear, h } from './dom';
@@ -25,6 +25,8 @@ export function mountBranding(root: HTMLElement): void {
     style: `background:${c}`, 'aria-label': `Colour ${c}`,
     onclick: () => update((p) => { p.brand.labelColour = c; }, 'brand'),
   })));
+  const formats = h('div.chips', { role: 'radiogroup', 'aria-label': 'Format' });
+  const formatNote = h('p.fine');
   const styles = h('div.chips');
   const logos = h('div.logos');
   const tiers = h('div.chips');
@@ -39,6 +41,7 @@ export function mountBranding(root: HTMLElement): void {
     h('div.brand-grid', {},
       h('div', {},
         h('label', {}, 'Name', name),
+        h('div.field', {}, h('span', {}, 'Format'), formats, formatNote),
         h('label', {}, 'Label colour', h('div.row', {}, colour, swatches)),
         h('div.field', {}, h('span', {}, 'Packaging style'), styles),
         h('div.field', {}, h('span', {}, 'Logo'), logos),
@@ -56,6 +59,17 @@ export function mountBranding(root: HTMLElement): void {
     if (document.activeElement !== colour) colour.value = b.labelColour;
     if (document.activeElement !== price) price.value = String(b.price);
     priceVal.textContent = b.price.toFixed(1);
+
+    clear(formats);
+    for (const f of FORMATS) {
+      const on = (b.format ?? 'refillable') === f;
+      formats.append(h('button.chip', { class: on ? 'on' : '', role: 'radio', 'aria-checked': String(on), onclick: () => update((p) => { p.brand.format = f; }, 'brand') }, f));
+    }
+    const fc = faultChance(state.product);
+    formatNote.textContent = (b.format === 'disposable'
+      ? 'Half the build cost, so big margins. But '
+      : 'Sturdy hardware. ') + `About ${Math.round(fc * 100)}% of units come back faulty at the ${b.tier} tier.`;
+    formatNote.classList.toggle('bad', fc >= 0.1);
 
     clear(styles);
     for (const s of PACK_STYLES) {

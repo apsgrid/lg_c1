@@ -92,6 +92,7 @@
     "terms": [
       { "stat": "price", "weight": -1.1, "pivot": 18, "label": "price" },
       { "stat": "tier.premium", "weight": -0.12, "pivot": 0, "label": "posh" },
+      { "stat": "format.disposable", "weight": 0.08, "pivot": 0, "label": "handy" },
       { "stat": "balance", "weight": 0.2, "pivot": 55, "label": "balanced" },
       { "stat": "t.smoothness", "weight": 0.18, "pivot": 40, "label": "smooth" },
       { "stat": "t.intensity", "weight": -0.35, "above": 70, "label": "harsh" },
@@ -102,6 +103,7 @@
       "price+": ["At that price? Bargain. I'll take three.", "Cheap and cheerful. Sold.", "Great value."],
       "price-": ["How much?! No chance.", "Way over my budget.", "Lovely, but I'm not paying that."],
       "posh-": ["Fancy packaging, fancy price. Not for me.", "Bit posh for me."],
+      "handy+": ["Disposable? Easy. Grab and go.", "No fuss, I like that."],
       "balanced+": ["Easy going down.", "Nice and simple."],
       "balanced-": ["Bit of a mess.", "Tastes confused."],
       "smooth+": ["Super smooth.", "No harshness at all."],
