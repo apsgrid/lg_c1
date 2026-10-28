@@ -59,7 +59,18 @@ Watchful staff and the second till upgrade keep the queue moving.
 
 The day sim lives in `src/sim/shop.ts`. It is pure and seeded: `beginDay` lines up the visitors, `step` serves the next one or returns an encounter, `resolve` applies your choice, and `endDay` closes up. `simulateDay` plays a whole day with a choice policy and is used by the tests.
 
-## Layout
+## The city
+
+Switch to **City** in the top bar for a top-down map of 11 locations: a school, the CBD, a nightclub strip, a church, a university, the beach, an industrial estate, a market square, the suburbs (home), a shopping centre and a hospital (`data/city.json`). Each has a slightly different customer mix, footfall (±15%), share of young-looking customers, police presence and rent. The effects are deliberately small, so where you go matters without deciding everything.
+
+- **Your places.** Home is your garage, and it holds your stock until you buy a **stash house** (400 cr) somewhere else. You choose where to **park your car**: at the car boot it's your shop, and after that it's the van that carries stock to wherever you sell. From the Small store on you choose, and can **move**, your **store**.
+- **Restocking.** Stock travels from your garage or stash, via your car, to where you sell. Short trips arrive the next morning; long ones take 2 or 3 days.
+- **Heat** (0-100) is police attention. It rises with selling from a car, serving kids, drive-bys, protests and refused refunds, and cools by 4 a day. The hotter you are and the more heavily policed the area, the likelier a **bust**: stock seized, a fine, and closed for the day (a car search loses everything in the car). Moving your store cuts heat by 60%.
+- **Serving kids.** Skipping the ID check near the school lets kids buy, and word spreads so more of them turn up. Every sale adds heat and some are Trading Standards test purchases (250 cr fine). It's a gamble that loses over time: in testing, serving every kid at the school gates for 30 days ended about 2,500 cr in debt with five busts, against about 600 cr up for checking ID.
+- **Rival stores** sit on the map. Once you have a store they may send protesters (fewer customers that day) or firebomb it overnight (closed for repairs; a security guard makes it much rarer). Open rival stores nearby take a small slice of your trade.
+- **Drive-bys.** From the City you can drive past a rival at night and lob firebombs in a silly timing mini game. Each window hit shuts them for a day and burns some of their notes on your recipes. It adds a lot of heat, the police may pull you over (fine, closed tomorrow), and their grudge makes revenge more likely. One drive-by a night.
+
+
 
 ```
 data/          notes, bases, synergies, customers (JSON)

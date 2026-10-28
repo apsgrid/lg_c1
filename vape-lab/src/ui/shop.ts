@@ -489,6 +489,8 @@ export function mountCounter(root: HTMLElement): void {
       return;
     }
     const repD = r.reputationEnd - r.reputationStart;
+    if (r.closed) body.append(h('div.closed-banner', {}, h('b', {}, `Closed on day ${r.day}`), h('div', {}, r.closed)));
+    const heatD = (r.heatEnd ?? 0) - (r.heatStart ?? 0);
     body.append(
       h('h3', {}, `Day ${r.day} report`),
       h('div.stats', {},
@@ -498,6 +500,7 @@ export function mountCounter(root: HTMLElement): void {
           h('span.fine', {}, `rent ${r.rent}${r.wages ? ` · staff ${r.wages}` : ''} · stock ${r.restockSpend.toFixed(0)}${r.fines ? ` · fines ${r.fines}` : ''}`)),
         h('div.stat', {}, h('span.muted', {}, 'Reputation'), h('b', {}, Math.round(r.reputationEnd)), h('span.fine', { class: repD >= 0 ? 'good' : 'bad' }, `${repD >= 0 ? '▲' : '▼'} ${Math.abs(repD).toFixed(1)}`)),
       ),
+      h('div.fine.heat-line', { class: (r.heatEnd ?? 0) >= 45 ? 'bad' : '' }, `🔥 Heat ${Math.round(r.heatEnd ?? 0)} (${heatD >= 0 ? '+' : ''}${heatD.toFixed(0)} today)${(r.heatEnd ?? 0) >= 45 ? '. Police are watching: lie low, or move somewhere quieter in the City.' : ''}`),
     );
     if (r.events.length) {
       body.append(h('h4', {}, 'What happened'), h('ul.events', {}, ...r.events.map((e) => h('li', { class: `ev-${e.kind}` }, h('span.ev-icon', { 'aria-hidden': 'true' }, EVENT_ICON[e.kind]), e.text))));

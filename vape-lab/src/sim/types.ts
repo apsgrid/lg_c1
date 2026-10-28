@@ -73,6 +73,8 @@ export interface CustomerDef {
 }
 
 export interface GameData {
+  /** City locations (see sim/city.ts). */
+  city?: import('./city').CityLocation[];
   /** Ready-made supplier products (ids filled in on load). */
   wholesale?: Product[];
   notes: NoteDef[];

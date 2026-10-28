@@ -13,3 +13,4 @@ export * from './util';
 export * from './product';
 export * from './shop';
 export * from './commission';
+export * from './city';

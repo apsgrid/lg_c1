@@ -47,7 +47,7 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
 .brand-mark { display: flex; align-items: center; gap: 6px; font-size: 16px; }
 .logo-dot { width: 14px; height: 14px; border-radius: 50%; background: conic-gradient(var(--accent), var(--accent-2), var(--gold), var(--accent)); }
 .view-tools { display: flex; align-items: center; gap: 12px; margin-left: auto; }
-#app[data-view='lab'] .shop-el, #app[data-view='shop'] .lab-el { display: none !important; }
+#app:not([data-view='lab']) .lab-el, #app:not([data-view='shop']) .shop-el, #app:not([data-view='city']) .city-el { display: none !important; }
 #app.lab-locked .view-tools.lab-el { visibility: hidden; }
 .view-seg button { font-weight: 600; }
 .cash-chip { font-weight: 700; font-variant-numeric: tabular-nums; padding: 4px 10px; border-radius: 999px; background: #2a2638; }
@@ -313,6 +313,46 @@ input[type='color'] { width: 40px; height: 32px; padding: 0; border: 1px solid v
 .lock-card p { margin: 0; color: var(--muted); }
 .lock-icon { font-size: 40px; }
 
+/* City */
+.city-map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+.heat { display: grid; gap: 4px; padding: 10px 12px; border-radius: var(--radius); background: #221f2f; border: 1px solid var(--line); margin-top: 8px; }
+.heat.hot { border-color: var(--bad); box-shadow: 0 0 18px rgba(255, 90, 106, 0.2); }
+.heat-head { display: flex; gap: 8px; align-items: baseline; }
+.heat-head b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.heat-head .fine { margin-left: auto; }
+.heat .bar { margin: 2px 0 0; }
+.heat-notes { padding-left: 18px; margin: 8px 0; font-size: 12.5px; color: var(--muted); display: grid; gap: 3px; }
+.place-head { display: flex; gap: 12px; align-items: center; margin-top: 14px; }
+.place-head h2 { margin: 0; font-size: 20px; }
+.place-icon { font-size: 36px; }
+.place-blurb { color: var(--muted); margin: 8px 0; }
+.place-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0; }
+.place-stats > div { background: #221f2f; border-radius: 10px; padding: 6px 10px; display: grid; gap: 2px; font-size: 12.5px; }
+.place-stats .bar { margin: 4px 0 0; }
+.mix { display: flex; gap: 4px; flex-wrap: wrap; }
+.place-actions { display: grid; gap: 6px; }
+.place-actions button { text-align: left; min-height: 40px; }
+.danger-btn { border-color: rgba(255, 90, 106, 0.5); color: #ffc2c8; }
+.danger-btn:hover:not(:disabled) { border-color: var(--bad); }
+.sites { display: grid; gap: 4px; }
+.sites > div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.sites b.warn { color: var(--mid); }
+.heat-chip { font-weight: 700; font-variant-numeric: tabular-nums; padding: 4px 10px; border-radius: 999px; background: #2a2638; }
+.heat-chip.warn { color: var(--mid); }
+.heat-chip.bad { color: var(--bad); }
+.closed-banner { border: 1px solid var(--bad); background: rgba(255, 90, 106, 0.1); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; display: grid; gap: 4px; }
+.heat-line { margin: -4px 0 8px; }
+
+/* Drive-by */
+.driveby { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(10, 8, 16, 0.92); padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.driveby-card { width: min(680px, 100%); background: var(--panel-solid); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: grid; gap: 10px; }
+.driveby-title { display: flex; align-items: center; justify-content: space-between; }
+.driveby-canvas { width: 100%; height: auto; aspect-ratio: 640 / 300; border-radius: 10px; display: block; touch-action: manipulation; cursor: crosshair; }
+.driveby-status { font-size: 13px; color: var(--muted); text-align: center; }
+.driveby-result { display: grid; gap: 8px; justify-items: center; text-align: center; padding: 10px; }
+.driveby-result h2 { margin: 0; }
+.big-emoji { font-size: 52px; }
+
 /* Queue */
 .queue { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin-bottom: 10px; font-size: 12.5px; }
 .queue-bar { height: 8px; border-radius: 4px; background: #2f2b40; overflow: hidden; }
@@ -389,6 +429,7 @@ details.danger { margin-top: 24px; color: var(--muted); }
   .view-seg { margin-left: auto; }
   .cash-chip { margin-left: auto; }
   #app.encounter-open { grid-template-rows: auto minmax(140px, 22%) 1fr auto; }
+  #app[data-view='city'] { grid-template-rows: auto minmax(280px, 52%) 1fr auto; }
   .enc-options.recs { grid-template-columns: 1fr; }
   .panel.left, .panel.right { grid-area: panel; border: none; padding-top: 12px; }
   .panel.left { display: none; }

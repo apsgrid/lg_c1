@@ -99,21 +99,23 @@ describe('encounters', () => {
     const seen = encountersSeen(stocked(4, 5000), 30);
     for (const k of ['recommend', 'id', 'probe', 'shoplift']) expect(seen.has(k)).toBe(true);
   });
-  it('serving a minor is fined; checking ID refuses them', () => {
-    let fined = 0, refused = 0;
+  it('serving a minor is a gamble: always heat, sometimes a sting; checking ID refuses them', () => {
+    let served = 0, stung = 0, refused = 0;
     run(stocked(0), 30, (e, sess) => {
       if (e.kind !== 'id') return 'browse';
       const v = sess.visitors[sess.pos];
       if (v.age < 18) {
-        const served = resolve(sess, 'serve', data);
-        if (served.session.fines >= ID_FINE) fined++;
-        const checked = resolve(sess, 'check', data);
-        if (checked.visit.walkout === 'underage') refused++;
+        const sv = resolve(sess, 'serve', data);
+        served++;
+        expect(sv.session.shop.heat).toBeGreaterThanOrEqual(sess.shop.heat + 12);
+        if (sv.session.fines >= sess.fines + ID_FINE) stung++;
+        if (resolve(sess, 'check', data).visit.walkout === 'underage') refused++;
       }
       return 'check';
     });
-    expect(fined).toBeGreaterThan(0);
-    expect(refused).toBe(fined);
+    expect(served).toBeGreaterThan(0);
+    expect(refused).toBe(served);
+    expect(stung).toBeLessThan(served);
   });
   it('catching the right shoplifter beats accusing the wrong one', () => {
     let tested = 0;
@@ -374,5 +376,99 @@ describe('counter trade-offs', () => {
       return e.kind === 'id' ? 'check' : 'browse';
     });
     expect(checked).toBe(true);
+  });
+});
+
+describe('the city', () => {
+  it('restocks take longer the further stock has to travel', async () => {
+    const { restockDays, parkCar } = await import('../src/sim');
+    const s = newShop(1);
+    expect(restockDays(s, data)).toBe(1);
+    expect(restockDays(parkCar(s, 'beach'), data)).toBeGreaterThan(1);
+    let t = { ...s, cash: 1000 };
+    t = parkCar(t, 'hospital');
+    t = addListing(t, product('A', [['mango', 40]]), data);
+    t = orderStock(t, 0, 10, data);
+    expect(t.listings[0].incomingDay).toBeGreaterThan(t.day);
+    const sess = beginDay(t, data);
+    expect(sess.shop.listings[0].stock).toBe(0);
+  });
+
+  it('a stash house near the car speeds up restocks', async () => {
+    const { restockDays, parkCar, buyStash } = await import('../src/sim');
+    const s = parkCar({ ...newShop(1), cash: 1000 }, 'beach');
+    expect(restockDays(buyStash(s, 'beach'), data)).toBeLessThan(restockDays(s, data));
+  });
+
+  it('location shifts the customer mix a little', () => {
+    const mix = (loc: string) => {
+      let s: ShopState = { ...stocked(2, 50000), store: loc };
+      const counts: Record<string, number> = {};
+      for (let i = 0; i < 25; i++) {
+        const r = simulateDay(s, data);
+        s = r.shop;
+        for (const v of r.report.visits) counts[v.archetype] = (counts[v.archetype] ?? 0) + 1;
+      }
+      return counts;
+    };
+    const beach = mix('beach'), cbd = mix('cbd');
+    expect(beach.ice_fan / (beach.brand_loyalist ?? 1)).toBeGreaterThan(cbd.ice_fan / (cbd.brand_loyalist ?? 1));
+  });
+
+  it('high heat gets you busted: stock seized, fined, closed for the day', () => {
+    let busted = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const s: ShopState = { ...stocked(0), seed, heat: 95, car: 'cbd' };
+      s.listings = s.listings.map((l) => ({ ...l, stock: 20, incoming: 0 }));
+      const sess = beginDay(s, data);
+      if (sess.closed) {
+        busted++;
+        expect(sess.visitors).toHaveLength(0);
+        expect(sess.fines).toBeGreaterThan(0);
+        expect(sess.shop.listings.every((l) => l.stock === 0)).toBe(true);
+      }
+    }
+    expect(busted).toBeGreaterThan(3);
+    // Cold and quiet: almost never.
+    let cold = 0;
+    for (let seed = 1; seed <= 30; seed++) if (beginDay({ ...stocked(0), seed, heat: 0, car: 'industrial' }, data).closed) cold++;
+    expect(cold).toBeLessThan(2);
+  });
+
+  it('moving the store sheds heat and costs money', async () => {
+    const { moveStore } = await import('../src/sim');
+    const s: ShopState = { ...stocked(2, 5000), store: 'cbd', heat: 80 };
+    const moved = moveStore(s, 'industrial', data);
+    expect(moved.store).toBe('industrial');
+    expect(moved.heat).toBeLessThan(40);
+    expect(moved.cash).toBeLessThan(s.cash);
+  });
+
+  it('drive-bys shut rivals, raise heat and grudges, and once a night only', async () => {
+    const { driveBy } = await import('../src/sim');
+    const s: ShopState = { ...stocked(2, 5000), heat: 0 };
+    const r = driveBy(s, 'mist_co', 3, data);
+    const rival = r.shop.rivals.find((x) => x.id === 'mist_co')!;
+    expect(rival.closedUntil).toBe(s.day + 2);
+    expect(rival.grudge).toBeGreaterThan(0);
+    expect(r.shop.heat).toBeGreaterThanOrEqual(18);
+    expect(driveBy(r.shop, 'cloud_kings', 3, data).shop).toBe(r.shop);
+    const miss = driveBy(s, 'mist_co', 0, data);
+    expect(miss.shop.rivals.find((x) => x.id === 'mist_co')!.closedUntil).toBe(0);
+  });
+
+  it('rivals attack a store eventually, harder if you hold a grudge match', () => {
+    const attacks = (grudge: number) => {
+      let n = 0;
+      for (let seed = 1; seed <= 200; seed++) {
+        const s: ShopState = { ...stocked(3, 5000), seed, reputation: 80 };
+        s.rivals = s.rivals.map((r) => ({ ...r, grudge }));
+        const sess = beginDay(s, data);
+        if (sess.events.some((e) => /protesters|firebombed/.test(e.text))) n++;
+      }
+      return n;
+    };
+    expect(attacks(0)).toBeGreaterThan(0);
+    expect(attacks(4)).toBeGreaterThan(attacks(0));
   });
 });

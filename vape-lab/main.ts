@@ -8,6 +8,7 @@ import { mountFormula } from './src/ui/formula';
 import { mountJournal } from './src/ui/journal';
 import { mountLibrary } from './src/ui/library';
 import { mountAssist, mountAuto, mountModeSwitch } from './src/ui/modes';
+import { mountCityMap, mountCityOverview, mountCityPanel, onPlaceTapped } from './src/ui/city';
 import { mountCounter, mountLedger, mountRegulars, mountRivals, mountShelf, openShop } from './src/ui/shop';
 import { mountTesting, runTestBatch } from './src/ui/testing';
 import { mountOrders } from './src/ui/orders';
@@ -15,7 +16,7 @@ import { mountTuning } from './src/ui/tuning';
 import { LabScene } from './src/view/scene';
 import { ShopScene } from './src/view/shopScene';
 
-type ViewId = 'lab' | 'shop';
+type ViewId = 'lab' | 'shop' | 'city';
 const phone = window.matchMedia('(max-width: 860px)');
 const app = document.getElementById('app')!;
 
@@ -111,12 +112,15 @@ mountShelf(shop.left, shopScene);
 shop.mountTabs();
 const openTop = h('button.primary.open-top', { onclick: () => void openShop() });
 const cashChip = h('span.cash-chip');
-shopTools.append(cashChip, openTop);
+const heatChip = h('span.heat-chip', { title: 'Heat: police attention. See the City view.' });
+shopTools.append(heatChip, cashChip, openTop);
 const renderShopTop = () => {
   const s = shopState.shop;
   openTop.textContent = shopState.playing ? 'Skip day' : `Open day ${s.day}`;
   cashChip.textContent = `${Math.round(s.cash)} cr`;
   cashChip.classList.toggle('bad', s.cash < 0);
+  heatChip.textContent = `🔥 ${Math.round(s.heat)}`;
+  heatChip.className = `heat-chip ${s.heat >= 70 ? 'bad' : s.heat >= 45 ? 'warn' : ''}`;
 };
 onShop((reason) => {
   renderShopTop();
@@ -130,6 +134,15 @@ onShop((reason) => {
 shop.buttons.get('rivals')?.addEventListener('click', () => shop.buttons.get('rivals')?.classList.remove('badge'));
 renderShopTop();
 shopScene.setShop(shopState.shop);
+
+// --- City view --------------------------------------------------------------------------
+const city = makeView('city', 'Place', [
+  { id: 'overview', label: 'Overview', mount: (el) => mountCityOverview(el) },
+]);
+mountCityMap(city.stage);
+mountCityPanel(city.left);
+city.mountTabs();
+onPlaceTapped(() => { if (phone.matches) city.select('left'); });
 
 // --- Lab lock: you mix your own flavours once you've moved into the garage ------------
 const labLock = h('div.lab-lock.lab-el', {},
@@ -155,7 +168,7 @@ function setView(v: ViewId): void {
   app.dataset.view = v;
   labScene.setActive(v === 'lab');
   shopScene.setActive(v === 'shop');
-  const active = v === 'lab' ? lab : shop;
+  const active = v === 'lab' ? lab : v === 'shop' ? shop : city;
   active.select(active.current());
   for (const b of viewSeg.children) {
     const on = (b as HTMLElement).dataset.view === v;
@@ -168,13 +181,13 @@ function setView(v: ViewId): void {
   }
   try { localStorage.setItem('vapelab.v1.view', v); } catch { /* ignore */ }
 }
-for (const [id, label] of [['lab', 'Lab'], ['shop', 'Shop']] as const) {
+for (const [id, label] of [['lab', 'Lab'], ['shop', 'Shop'], ['city', 'City']] as const) {
   viewSeg.append(h('button', { role: 'radio', 'data-view': id, onclick: () => setView(id) }, label));
 }
 // New players start at the car boot; returning players land where they left off.
 let startView: ViewId = canMakeOwn(shopState.shop) ? 'lab' : 'shop';
 try { startView = (localStorage.getItem('vapelab.v1.view') as ViewId) || startView; } catch { /* ignore */ }
-setView(startView === 'shop' ? 'shop' : 'lab');
+setView(['lab', 'shop', 'city'].includes(startView) ? startView : 'shop');
 renderLabLock();
 phone.addEventListener('change', () => setView(app.dataset.view as ViewId));
 

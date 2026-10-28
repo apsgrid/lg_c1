@@ -6,6 +6,7 @@
 // with resolve(). endDay() closes up. simulateDay() runs a whole day with safe
 // default choices (used for tests and for "skip to closing").
 import { COMMISSION_GREAT, COMMISSION_OK, makeBrief, scoreCommission, type Commission, type Want } from './commission';
+import { distance, haulDays, type CityLocation } from './city';
 import { faultChance, unitCost } from './cost';
 import { productId } from './id';
 import { deriveSeed, mulberry32, rngPick, rngRange, type Rng } from './rng';
@@ -75,6 +76,8 @@ export function upgradeShop(shop: ShopState): ShopState {
   const next = SHOP_TIERS[s.tier + 1];
   s.cash = round2(s.cash - next.upgradeCost);
   s.tier++;
+  // Your first store opens where you've been selling from the car (move it any time in the City).
+  if (s.tier >= 2 && !s.store) s.store = s.car;
   return s;
 }
 
@@ -87,6 +90,8 @@ export interface Listing {
   incoming: number;
   autoRestockTo: number;
   soldTotal: number;
+  /** The day incoming stock reaches the shop (depends on how far it's hauled). */
+  incomingDay?: number;
 }
 
 export interface Regular {
@@ -116,6 +121,12 @@ export interface Rival {
   knockoffs: Knockoff[];
   bannedUntil: number;
   caught: number;
+  /** City location of their store. */
+  loc: string;
+  /** Shut (after your drive-by) until the end of this day. */
+  closedUntil: number;
+  /** How much they want revenge on you. */
+  grudge: number;
 }
 
 export interface PendingReturn {
@@ -157,6 +168,23 @@ export interface ShopState {
   upgrades: string[];
   commissions: Commission[];
   nextCommissionId: number;
+  // --- The city ---
+  /** Your home (and garage). */
+  home: string;
+  /** Where your car is parked: your shop at the car boot, your delivery van after that. */
+  car: string;
+  /** Stash house location, once bought. Stock is kept at home until then. */
+  stash?: string;
+  /** Your store, from the Small store on. */
+  store?: string;
+  /** 0-100: how much attention you're getting from the police. */
+  heat: number;
+  /** Word going round the school gates that you'll serve kids. */
+  kidBuzz: number;
+  lastDriveByDay: number;
+  /** Shut for this day (raid, arrest, firebomb). */
+  closedDay?: number;
+  closedReason?: string;
 }
 
 function clone<T>(v: T): T {
@@ -176,9 +204,9 @@ export function newShop(seed: number, name = 'My Vape Store'): ShopState {
     listings: [],
     regulars: [],
     rivals: [
-      { id: 'cloud_kings', name: 'Cloud Kings', colour: '#ff5a5a', aggression: 0.8, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0 },
-      { id: 'mist_co', name: 'Mist & Co.', colour: '#5ad7ff', aggression: 0.5, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0 },
-      { id: 'puff_palace', name: 'Puff Palace', colour: '#ffb020', aggression: 0.3, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0 },
+      { id: 'cloud_kings', name: 'Cloud Kings', colour: '#ff5a5a', aggression: 0.8, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.cloud_kings, closedUntil: 0, grudge: 0 },
+      { id: 'mist_co', name: 'Mist & Co.', colour: '#5ad7ff', aggression: 0.5, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.mist_co, closedUntil: 0, grudge: 0 },
+      { id: 'puff_palace', name: 'Puff Palace', colour: '#ffb020', aggression: 0.3, knowledge: {}, knockoffs: [], bannedUntil: 0, caught: 0, loc: RIVAL_LOCS.puff_palace, closedUntil: 0, grudge: 0 },
     ],
     pendingReturns: [],
     history: [],
@@ -187,15 +215,126 @@ export function newShop(seed: number, name = 'My Vape Store'): ShopState {
     upgrades: [],
     commissions: [],
     nextCommissionId: 1,
+    home: 'suburbs',
+    car: 'suburbs',
+    heat: 0,
+    kidBuzz: 0,
+    lastDriveByDay: 0,
   };
 }
+
+const RIVAL_LOCS: Record<string, string> = { cloud_kings: 'cbd', mist_co: 'mall', puff_palace: 'beach' };
 
 /** Upgrade older saves. A v1 shop was already a small store. */
 export function migrateShop(raw: unknown): ShopState {
   const s = raw as Partial<ShopState> & { version?: number };
-  const extras = { upgrades: s.upgrades ?? [], commissions: s.commissions ?? [], nextCommissionId: s.nextCommissionId ?? 1 };
+  const extras = {
+    upgrades: s.upgrades ?? [], commissions: s.commissions ?? [], nextCommissionId: s.nextCommissionId ?? 1,
+    home: s.home ?? 'suburbs', car: s.car ?? 'suburbs', heat: s.heat ?? 0, kidBuzz: s.kidBuzz ?? 0, lastDriveByDay: s.lastDriveByDay ?? 0,
+    store: s.store ?? ((s.tier ?? 2) >= 2 ? 'market' : undefined),
+    rivals: (s.rivals ?? []).map((r) => ({ ...r, loc: r.loc ?? RIVAL_LOCS[r.id] ?? 'cbd', closedUntil: r.closedUntil ?? 0, grudge: r.grudge ?? 0 })),
+  };
   if (s.version === 2) return { ...(s as ShopState), ...extras };
   return { ...(s as ShopState), ...extras, version: 2, tier: 2, pendingReturns: [] };
+}
+
+// --- The city --------------------------------------------------------------------------
+
+export const STASH_COST = 400;
+export const STASH_MOVE_COST = 150;
+export const ARREST_FINE = 300;
+
+export function cityLoc(data: GameData, id?: string): CityLocation | undefined {
+  return id ? data.city?.find((l) => l.id === id) : undefined;
+}
+
+/** Where you sell from: the car at the car boot, home at the garage, then your store. */
+export function sellLocId(shop: ShopState): string {
+  if (shop.tier === 0) return shop.car;
+  if (shop.tier === 1) return shop.home;
+  return shop.store ?? shop.car;
+}
+
+export function storageLocId(shop: ShopState): string {
+  return shop.stash ?? shop.home;
+}
+
+/** Days for a restock to reach the shop: stock goes from storage, via your car, to where you sell. */
+export function restockDays(shop: ShopState, data: GameData): number {
+  const store = cityLoc(data, storageLocId(shop));
+  const car = cityLoc(data, shop.car);
+  const sell = cityLoc(data, sellLocId(shop));
+  const d = shop.tier === 0 ? distance(store, car) : distance(store, car) + distance(car, sell);
+  return 1 + haulDays(d);
+}
+
+export function relocationCost(shop: ShopState): number {
+  return shop.store ? 150 + 100 * shop.tier : 0;
+}
+
+export function parkCar(shop: ShopState, locId: string): ShopState {
+  return { ...clone(shop), car: locId };
+}
+
+export function buyStash(shop: ShopState, locId: string): ShopState {
+  const cost = shop.stash ? STASH_MOVE_COST : STASH_COST;
+  if (shop.cash < cost || shop.stash === locId) return shop;
+  const s = clone(shop);
+  s.cash = round2(s.cash - cost);
+  s.stash = locId;
+  return s;
+}
+
+/** Move your store. Sheds a lot of heat; regulars far from the new place drift a bit. */
+export function moveStore(shop: ShopState, locId: string, data: GameData): ShopState {
+  if (shop.tier < 2 || shop.store === locId) return shop;
+  const cost = relocationCost(shop);
+  if (shop.cash < cost) return shop;
+  const s = clone(shop);
+  const far = distance(cityLoc(data, s.store), cityLoc(data, locId)) > 30;
+  s.cash = round2(s.cash - cost);
+  s.store = locId;
+  s.heat = round1(s.heat * 0.4);
+  s.kidBuzz = 0;
+  if (far) for (const r of s.regulars) r.loyalty = clamp(r.loyalty - 12);
+  return s;
+}
+
+export interface DriveByResult {
+  shop: ShopState;
+  caught: boolean;
+  text: string;
+}
+
+/**
+ * The drive-by: lob firebombs at a rival's shop after closing. Hits (0-3, from
+ * the mini game) shut them for that many days and burn some of their notes on
+ * you. Raises heat a lot, may get you arrested, and they'll want revenge.
+ */
+export function driveBy(shop: ShopState, rivalId: string, hits: number, data: GameData): DriveByResult {
+  const rival = shop.rivals.find((r) => r.id === rivalId);
+  if (!rival || shop.lastDriveByDay === shop.day || rival.closedUntil >= shop.day) return { shop, caught: false, text: 'Not tonight.' };
+  const s = clone(shop);
+  const r = s.rivals.find((x) => x.id === rivalId)!;
+  const rng = mulberry32(deriveSeed(s.seed, `driveby:${s.day}:${rivalId}:${hits}`));
+  s.lastDriveByDay = s.day;
+  s.heat = clamp(s.heat + 18 + (3 - hits) * 4);
+  r.grudge += 1;
+  let text: string;
+  if (hits > 0) {
+    r.closedUntil = s.day + hits - 1;
+    for (const k of Object.keys(r.knowledge)) r.knowledge[k] = round1(r.knowledge[k] * (1 - 0.2 * hits));
+    text = `${r.name} is shut for ${hits} day${hits === 1 ? '' : 's'}, and some of their notes on you went up in smoke.`;
+  } else text = `You missed ${r.name} completely. They saw your car though.`;
+  const caught = rng() < (cityLoc(data, r.loc)?.police ?? 0.5) * 0.3 * (1 + s.heat / 100);
+  if (caught) {
+    s.cash = round2(s.cash - ARREST_FINE);
+    s.heat = clamp(s.heat + 15);
+    s.closedDay = s.day;
+    s.closedReason = 'You were arrested after the drive-by and spent the day at the station.';
+    text += ` The police pulled you over: ${ARREST_FINE} cr fine and you're shut tomorrow.`;
+  }
+  return { shop: s, caught, text };
 }
 
 // --- Player actions (pure) ------------------------------------------------------------
@@ -302,7 +441,7 @@ export function maxOrder(shop: ShopState, index: number, data: GameData): number
   return Math.max(0, Math.min(MAX_STOCK - l.stock - l.incoming, Math.floor(shop.cash / cost)));
 }
 
-/** Pay now, delivered next morning. */
+/** Pay now. It reaches the shop the next morning, or later if it has a long way to travel. */
 export function orderStock(shop: ShopState, index: number, qty: number, data: GameData): ShopState {
   const s = clone(shop);
   const l = s.listings[index];
@@ -312,6 +451,8 @@ export function orderStock(shop: ShopState, index: number, qty: number, data: Ga
   const cost = round2(unitCost(l.product, data).total * n);
   s.cash = round2(s.cash - cost);
   s.spentSinceOpen = round2(s.spentSinceOpen + cost);
+  const arrive = s.day + restockDays(s, data) - 1;
+  l.incomingDay = l.incoming > 0 ? Math.max(l.incomingDay ?? arrive, arrive) : arrive;
   l.incoming += n;
   return s;
 }
@@ -464,10 +605,15 @@ export interface DaySession {
   restockSpend: number;
   /** Minutes the queue is backed up. Careful choices take time; a long queue makes people leave. */
   queue: number;
+  /** Why you're shut today, if you are. */
+  closed?: string;
 }
 
 export interface DayReport {
   day: number;
+  closed?: string;
+  heatStart: number;
+  heatEnd: number;
   tier: ShopTierId;
   visitors: number;
   buyers: number;
@@ -503,8 +649,8 @@ function vrng(s: DaySession | ShopState, day: number, i: number, salt: string): 
   return mulberry32(deriveSeed(seed, `d${day}:v${i}:${salt}`));
 }
 
-function pickArchetype(rng: Rng, data: GameData, tier: ShopTier): CustomerId {
-  const weights = data.customers.map((c) => tier.mix[c.id] ?? 1);
+function pickArchetype(rng: Rng, data: GameData, tier: ShopTier, here?: CityLocation): CustomerId {
+  const weights = data.customers.map((c) => (tier.mix[c.id] ?? 1) * (here?.mix[c.id] ?? 1));
   let r = rng() * weights.reduce((a, b) => a + b, 0);
   for (let i = 0; i < weights.length; i++) {
     r -= weights[i];
@@ -532,13 +678,96 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
   const tier = tierOf(shop);
   const rng = mulberry32(deriveSeed(shop.seed, `day:${day}`));
   const events: DayEvent[] = [];
+  const here = cityLoc(data, sellLocId(shop));
+  let startFines = 0;
+  let footfallMul = 1;
 
+  let delivered = 0;
   for (const l of shop.listings) {
-    if (l.incoming > 0) {
+    if (l.incoming > 0 && (l.incomingDay ?? day) <= day) {
       events.push({ kind: 'delivery', text: `${l.incoming} × ${l.product.brand.name || 'Untitled'} delivered.` });
       l.stock += l.incoming;
+      delivered += l.incoming;
       l.incoming = 0;
     }
+  }
+
+  // Heat cools a little each day; so does word at the school gates.
+  shop.heat = round1(clamp(shop.heat - 4));
+  shop.kidBuzz = Math.max(0, shop.kidBuzz - 1);
+  for (const r of shop.rivals) r.grudge = round2(r.grudge * 0.9);
+  const heat = shop.heat / 100;
+  const police = here?.police ?? 0.5;
+
+  // Police: the hotter you are, the likelier a bust. Worst when you're selling from a car.
+  let closed: string | undefined = shop.closedDay === day ? shop.closedReason : undefined;
+  if (!closed) {
+    const bustChance = tier.id === 'car' || tier.id === 'garage' ? police * (0.01 + heat ** 1.5 * 0.45) : police * heat ** 1.5 * 0.3;
+    if (rng() < bustChance) {
+      const fine = 120 + 80 * shop.tier;
+      const lose = tier.id === 'car' ? 1 : tier.id === 'garage' ? 0.5 : 0.4;
+      let lost = 0;
+      for (const l of shop.listings) {
+        const n = Math.ceil(l.stock * lose);
+        l.stock -= n;
+        lost += n;
+      }
+      startFines += fine;
+      shop.heat = round1(shop.heat * 0.4);
+      shop.reputation = clamp(shop.reputation - 3);
+      closed = tier.id === 'car'
+        ? `Police searched your car: ${lost} units seized, ${fine} cr fine, and you're done for the day.`
+        : `Police raided the ${tier.id === 'garage' ? 'garage' : 'shop'}: ${lost} units seized, ${fine} cr fine, closed for the day.`;
+      events.push({ kind: 'fine', text: closed });
+    } else if (shop.tier >= 1 && delivered > 0 && rng() < (cityLoc(data, shop.car)?.police ?? 0.5) * heat * 0.3) {
+      // The car got pulled over on the restock run.
+      let lost = 0;
+      for (const l of shop.listings) {
+        const n = Math.min(l.stock, Math.ceil(delivered / shop.listings.length));
+        l.stock -= n;
+        lost += n;
+      }
+      startFines += 100;
+      events.push({ kind: 'fine', text: `Your car was pulled over on the restock run: ${lost} units seized and a 100 cr fine.` });
+    }
+  } else events.push({ kind: 'fine', text: closed });
+
+  // Rival stores take it out on your store: protests, and sometimes a firebomb.
+  if (!closed && tier.rivals) {
+    for (const r of shop.rivals) {
+      if (r.closedUntil >= day) continue;
+      if (rng() > r.aggression * 0.02 * (1 + r.grudge) * (1 + shop.reputation / 200)) continue;
+      const bombChance = shop.vigilance === 2 ? 0.1 : 0.3;
+      if (rng() < bombChance) {
+        const repair = 80 * shop.tier;
+        for (const l of shop.listings) l.stock -= Math.floor(l.stock * 0.3);
+        startFines += repair;
+        closed = `${r.name} firebombed your store overnight. Nobody was hurt, but you're shut for repairs (${repair} cr) and lost some stock.`;
+        events.push({ kind: 'fine', text: closed });
+        break;
+      }
+      footfallMul *= 0.6;
+      shop.reputation = clamp(shop.reputation - 1);
+      shop.heat = clamp(shop.heat + 3);
+      events.push({ kind: 'stockout', text: `${r.name} sent protesters to your door. Fewer customers today.` });
+    }
+  }
+
+  // Selling from a car draws attention.
+  if (!closed && tier.id === 'car') shop.heat = clamp(shop.heat + 1.5);
+
+  if (closed) {
+    shop.closedDay = undefined;
+    shop.closedReason = undefined;
+    return {
+      shop, day, events, visitors: [], pos: 0, visits: [], sales: {}, revenue: 0, refunds: 0, fines: startFines, queue: 0,
+      repStart: input.reputation, restockSpend: shop.spentSinceOpen, closed,
+    };
+  }
+
+  // Open rival stores nearby take a small slice of passing trade.
+  for (const r of shop.rivals) {
+    if (r.closedUntil < day && distance(cityLoc(data, r.loc), here) < 25) footfallMul *= 0.93;
   }
 
   const visitors: Omit<Visitor, 'idx'>[] = [];
@@ -592,13 +821,16 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
   }
 
   // Walk-ins, some of whom look young.
-  const walkIns = Math.max(2, Math.round((4 + shop.reputation / 8 + rngRange(rng, 0, 4)) * tier.footfall * (1 + perk(shop, 'footfall'))));
+  const walkIns = Math.max(2, Math.round((4 + shop.reputation / 8 + rngRange(rng, 0, 4)) * tier.footfall * (here?.footfall ?? 1) * footfallMul * (1 + perk(shop, 'footfall'))));
+  const nearSchool = here?.id === 'school';
+  const youngShare = clamp(tier.youngShare + (here?.young ?? 0) + shop.kidBuzz * (nearSchool ? 0.02 : 0.008), 0, 0.6);
+  const minorShare = clamp((here?.minorShare ?? 0.45) + shop.kidBuzz * 0.01, 0, 0.95);
   for (let i = 0; i < walkIns; i++) {
-    const archetype = pickArchetype(rng, data, tier);
+    const archetype = pickArchetype(rng, data, tier, here);
     const v: Omit<Visitor, 'idx'> = { ...base(), kind: 'walkin', name: rngPick(rng, FIRST), archetype };
-    if (rng() < tier.youngShare) {
+    if (rng() < youngShare) {
       v.looksYoung = true;
-      const minor = rng() < 0.45;
+      const minor = rng() < minorShare;
       v.age = minor ? 15 + Math.floor(rng() * 3) : 18 + Math.floor(rng() * 5);
       v.youngLook = minor
         ? rngPick(rng, rng() < 0.4 ? YOUNG_LOOKS.minorObvious : YOUNG_LOOKS.minorUnsure)
@@ -613,8 +845,8 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
   // Rival secret shoppers, disguised as ordinary customers.
   if (tier.rivals) {
     for (const rival of shop.rivals) {
-      if (rng() > 0.1 + rival.aggression * 0.25) continue;
-      const archetype = pickArchetype(rng, data, tier);
+      if (rival.closedUntil >= day || rng() > 0.1 + rival.aggression * 0.25) continue;
+      const archetype = pickArchetype(rng, data, tier, here);
       visitors.push({
         ...base(), kind: 'rival', rivalId: rival.id, archetype,
         name: rngPick(rng, FIRST),
@@ -635,15 +867,15 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
     const thiefSlot = Math.floor(rng() * 3);
     const decoys = [0, 1].map(() => ({ name: rngPick(rng, FIRST), look: rngPick(rng, LOOKS), tell: rng() < 0.6 ? rngPick(rng, INNOCENT_TELLS) : undefined }));
     visitors.splice(at, 0, {
-      ...base(), kind: 'thief', name: rngPick(rng, FIRST), archetype: pickArchetype(rng, data, tier), decoys, thiefSlot,
+      ...base(), kind: 'thief', name: rngPick(rng, FIRST), archetype: pickArchetype(rng, data, tier, here), decoys, thiefSlot,
     });
   }
 
   return {
     shop, day, events,
     visitors: visitors.map((v, idx) => ({ ...v, idx })),
-    pos: 0, visits: [], sales: {}, revenue: 0, refunds: 0, fines: 0, queue: 0,
-    repStart: shop.reputation,
+    pos: 0, visits: [], sales: {}, revenue: 0, refunds: 0, fines: startFines, queue: 0,
+    repStart: input.reputation,
     restockSpend: shop.spentSinceOpen,
   };
 }
@@ -651,7 +883,7 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
 // --- Helpers used while serving ----------------------------------------------------------
 
 function knockedOff(shop: ShopState, pid: string): boolean {
-  return shop.rivals.some((r) => r.knockoffs.some((k) => k.productId === pid));
+  return shop.rivals.some((r) => r.closedUntil < shop.day && r.knockoffs.some((k) => k.productId === pid));
 }
 
 function rate(s: DaySession, l: Listing, archetype: CustomerId, data: GameData, regular?: Regular): number {
@@ -925,7 +1157,7 @@ export function step(input: DaySession, data: GameData): StepResult {
       detail: 'They look young. Rule of thumb: if they look under 25, ask.',
       options: [
         { id: 'check', label: 'Ask for ID', hint: perk(s.shop, 'idScanner') ? 'Quick with the scanner' : 'Slow, and some adults take offence and leave' },
-        { id: 'serve', label: 'Just serve them', hint: `Fast. But selling to a minor: ${ID_FINE} cr fine and a big reputation hit` },
+        { id: 'serve', label: 'Just serve them', hint: `Fast. If they're a minor: heat, and it might be a ${ID_FINE} cr sting` },
       ],
     });
   }
@@ -1073,6 +1305,7 @@ export function resolve(input: DaySession, choice: string, data: GameData): { se
     }
     if (choice === 'refuse') {
       rep(s, -2.5);
+      s.shop.heat = clamp(s.shop.heat + 2);
       if (regular) regular.loyalty = clamp(regular.loyalty - 20);
       s.events.push({ kind: 'return', text: `Refused ${v.name}'s refund on a faulty ${r.productName}. They're telling everyone.` });
       return finish(none({ walkout: 'refused', note: 'refund refused' }), { line: 'Unbelievable. I\'m leaving a review.', tone: 'bad', pop: 'Angry' });
@@ -1115,12 +1348,22 @@ export function resolve(input: DaySession, choice: string, data: GameData): { se
       return finish(none({ walkout: 'underage' }), { line: 'Er… left it at home. Never mind.', tone: 'good', pop: 'Refused' });
     }
     if (choice === 'serve' && minor) {
-      s.fines = round2(s.fines + ID_FINE);
-      rep(s, -6);
-      s.events.push({ kind: 'fine', text: `You sold to a ${v.age}-year-old. Trading Standards fined you ${ID_FINE} cr.` });
+      // A gamble: some kids are Trading Standards test purchasers, and every sale adds heat.
+      const here = cityLoc(data, sellLocId(s.shop));
+      s.shop.heat = clamp(s.shop.heat + 12);
+      s.shop.kidBuzz = Math.min(20, s.shop.kidBuzz + 2);
+      if (rng() < 0.12 + (here?.police ?? 0.5) * 0.12) {
+        s.fines = round2(s.fines + ID_FINE);
+        s.shop.heat = clamp(s.shop.heat + 15);
+        rep(s, -6);
+        s.events.push({ kind: 'fine', text: `The ${v.age}-year-old was a Trading Standards test purchase. ${ID_FINE} cr fine.` });
+        return finish(none({ note: 'underage sale' }), { line: 'Trading Standards. You\'re getting a fine.', tone: 'bad', pop: `−${ID_FINE} cr` });
+      }
+      rep(s, -1);
+      s.events.push({ kind: 'fine', text: `You sold to a ${v.age}-year-old. Word's getting round the school gates, and so is the heat.` });
       const l = autoShop(s, v, data, rng).listing ?? inStock(s)[0];
       const spent = l ? sell(s, v, l, 1, data) : 0;
-      return finish(none({ productId: l?.product.id, qty: l ? 1 : 0, spent, walkout: undefined, note: 'underage sale' }), { line: 'They were underage. That\'s a fine.', tone: 'bad', pop: `−${ID_FINE} cr` });
+      return finish(none({ productId: l?.product.id, qty: l ? 1 : 0, spent, walkout: undefined, note: 'underage sale' }), { line: 'Sick, cheers!', tone: 'bad', pop: 'Heat +12' });
     }
     // Adult. Being carded can sting: some leave without buying (not with a quick scanner).
     if (choice === 'check' && rng() < (perk(s.shop, 'idScanner') ? 0.04 : 0.18)) {
@@ -1231,7 +1474,8 @@ export function endDay(input: DaySession, data: GameData): { shop: ShopState; re
   if (offended) s.events.push({ kind: 'id_refused', text: `${offended} adult${offended === 1 ? '' : 's'} took offence at being asked for ID and left.` });
 
   const wages = tier.rivals || tier.shoplift > 0 ? VIGILANCE[shop.vigilance].wage : 0;
-  shop.cash = round2(shop.cash + s.revenue - s.refunds - s.fines - wages - tier.rent);
+  const rent = round1(tier.rent * (shop.tier >= 2 ? cityLoc(data, shop.store)?.rent ?? 1 : 1) + (shop.stash ? 10 : 0));
+  shop.cash = round2(shop.cash + s.revenue - s.refunds - s.fines - wages - rent);
   shop.spentSinceOpen = 0;
   // Word of mouth fades: reputation drifts back toward 50 unless you keep earning it.
   const rest = 50 + perk(shop, 'repRest');
@@ -1259,9 +1503,12 @@ export function endDay(input: DaySession, data: GameData): { shop: ShopState; re
     refunds: s.refunds,
     fines: s.fines,
     wages,
-    rent: tier.rent,
+    rent,
     restockSpend: s.restockSpend,
-    profit: round2(s.revenue - s.refunds - s.fines - wages - tier.rent - s.restockSpend),
+    profit: round2(s.revenue - s.refunds - s.fines - wages - rent - s.restockSpend),
+    closed: s.closed,
+    heatStart: input.shop.heat,
+    heatEnd: next.heat,
     cashEnd: next.cash,
     reputationStart: s.repStart,
     reputationEnd: next.reputation,

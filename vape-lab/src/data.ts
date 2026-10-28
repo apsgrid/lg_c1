@@ -3,10 +3,11 @@ import bases from '../data/bases.json';
 import synergies from '../data/synergies.json';
 import customers from '../data/customers.json';
 import wholesale from '../data/wholesale.json';
+import city from '../data/city.json';
 import { productId } from './sim/id';
 import type { GameData, Product } from './sim/types';
 
 export const GAME_DATA: GameData = {
-  notes, bases, synergies, customers,
+  notes, bases, synergies, customers, city,
   wholesale: (wholesale as unknown as Omit<Product, 'id'>[]).map((p) => ({ ...p, id: productId(p) }) as Product),
 } as unknown as GameData;
