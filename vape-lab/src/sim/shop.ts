@@ -5,6 +5,7 @@
 // at a time, and some stop at the counter with an Encounter the player resolves
 // with resolve(). endDay() closes up. simulateDay() runs a whole day with safe
 // default choices (used for tests and for "skip to closing").
+import { COMMISSION_GREAT, COMMISSION_OK, makeBrief, scoreCommission, type Commission, type Want } from './commission';
 import { faultChance, unitCost } from './cost';
 import { productId } from './id';
 import { deriveSeed, mulberry32, rngPick, rngRange, type Rng } from './rng';
@@ -45,11 +46,11 @@ export interface ShopTier {
 
 export const SHOP_TIERS: ShopTier[] = [
   { id: 'car', name: 'Car boot', blurb: 'Selling from the boot of your car. Cheap, but few people find you.', slots: 2, rent: 5, footfall: 0.45, upgradeCost: 0, repNeeded: 0, rivals: false, shoplift: 0, maxRegulars: 3, youngShare: 0.22, mix: { budget_buyer: 3, fruit_fanatic: 2 } },
-  { id: 'garage', name: 'Garage', blurb: 'Roller door up, folding table out. Word is getting round.', slots: 3, rent: 15, footfall: 0.7, upgradeCost: 500, repNeeded: 52, rivals: false, shoplift: 0.12, maxRegulars: 5, youngShare: 0.16, mix: { budget_buyer: 2, fruit_fanatic: 2, ice_fan: 1.5 } },
-  { id: 'small', name: 'Small store', blurb: 'A real shop front. Rival stores start paying attention.', slots: 4, rent: 40, footfall: 1.0, upgradeCost: 1500, repNeeded: 56, rivals: true, shoplift: 0.22, maxRegulars: 8, youngShare: 0.12, mix: {} },
-  { id: 'medium', name: 'Medium store', blurb: 'More shelf space, more footfall, more eyes on you.', slots: 6, rent: 70, footfall: 1.4, upgradeCost: 4000, repNeeded: 60, rivals: true, shoplift: 0.32, maxRegulars: 10, youngShare: 0.1, mix: {} },
-  { id: 'large', name: 'Large store', blurb: 'A destination shop. Busy days, busy rivals.', slots: 8, rent: 120, footfall: 1.9, upgradeCost: 9000, repNeeded: 64, rivals: true, shoplift: 0.42, maxRegulars: 14, youngShare: 0.08, mix: { novelty_seeker: 1.5 } },
-  { id: 'premium', name: 'Premium boutique', blurb: 'Marble, soft lighting and customers who pay for quality.', slots: 8, rent: 200, footfall: 1.6, upgradeCost: 18000, repNeeded: 72, rivals: true, shoplift: 0.25, maxRegulars: 16, youngShare: 0.04, mix: { brand_loyalist: 2, novelty_seeker: 2, anti_sweet: 1.5, budget_buyer: 0.3 } },
+  { id: 'garage', name: 'Garage', blurb: 'Roller door up, folding table out. Word is getting round.', slots: 3, rent: 15, footfall: 0.7, upgradeCost: 300, repNeeded: 52, rivals: false, shoplift: 0.12, maxRegulars: 5, youngShare: 0.16, mix: { budget_buyer: 2, fruit_fanatic: 2, ice_fan: 1.5 } },
+  { id: 'small', name: 'Small store', blurb: 'A real shop front. Rival stores start paying attention.', slots: 4, rent: 40, footfall: 1.0, upgradeCost: 500, repNeeded: 56, rivals: true, shoplift: 0.22, maxRegulars: 8, youngShare: 0.12, mix: {} },
+  { id: 'medium', name: 'Medium store', blurb: 'More shelf space, more footfall, more eyes on you.', slots: 6, rent: 70, footfall: 1.4, upgradeCost: 1000, repNeeded: 60, rivals: true, shoplift: 0.32, maxRegulars: 10, youngShare: 0.1, mix: {} },
+  { id: 'large', name: 'Large store', blurb: 'A destination shop. Busy days, busy rivals.', slots: 8, rent: 120, footfall: 1.9, upgradeCost: 1800, repNeeded: 65, rivals: true, shoplift: 0.42, maxRegulars: 14, youngShare: 0.08, mix: { novelty_seeker: 1.5 } },
+  { id: 'premium', name: 'Premium boutique', blurb: 'Marble, soft lighting and customers who pay for quality.', slots: 8, rent: 200, footfall: 1.6, upgradeCost: 3200, repNeeded: 72, rivals: true, shoplift: 0.25, maxRegulars: 16, youngShare: 0.04, mix: { brand_loyalist: 2, novelty_seeker: 2, anti_sweet: 1.5, budget_buyer: 0.3 } },
 ];
 
 export function tierOf(shop: ShopState): ShopTier {
@@ -154,6 +155,8 @@ export interface ShopState {
   nextRegularId: number;
   /** Shop upgrades bought so far (ids from UPGRADES). Kept when you move. */
   upgrades: string[];
+  commissions: Commission[];
+  nextCommissionId: number;
 }
 
 function clone<T>(v: T): T {
@@ -182,14 +185,17 @@ export function newShop(seed: number, name = 'My Vape Store'): ShopState {
     spentSinceOpen: 0,
     nextRegularId: 1,
     upgrades: [],
+    commissions: [],
+    nextCommissionId: 1,
   };
 }
 
 /** Upgrade older saves. A v1 shop was already a small store. */
 export function migrateShop(raw: unknown): ShopState {
   const s = raw as Partial<ShopState> & { version?: number };
-  if (s.version === 2) return { ...(s as ShopState), upgrades: s.upgrades ?? [] };
-  return { ...(s as ShopState), version: 2, tier: 2, pendingReturns: [], upgrades: [] };
+  const extras = { upgrades: s.upgrades ?? [], commissions: s.commissions ?? [], nextCommissionId: s.nextCommissionId ?? 1 };
+  if (s.version === 2) return { ...(s as ShopState), ...extras };
+  return { ...(s as ShopState), ...extras, version: 2, tier: 2, pendingReturns: [] };
 }
 
 // --- Player actions (pure) ------------------------------------------------------------
@@ -365,7 +371,7 @@ const ASKS: Record<string, string[]> = {
 // --- Day session ------------------------------------------------------------------------
 
 export type VisitorKind = 'walkin' | 'regular' | 'rival' | 'thief' | 'return';
-export type EncounterKind = 'recommend' | 'id' | 'probe' | 'shoplift' | 'return';
+export type EncounterKind = 'recommend' | 'id' | 'probe' | 'shoplift' | 'return' | 'commission' | 'pickup';
 
 export interface Visitor {
   idx: number;
@@ -383,6 +389,10 @@ export interface Visitor {
   returnOf?: PendingReturn;
   decoys?: { name: string; look: string; tell?: string }[];
   thiefSlot?: number;
+  /** A regular asking for a bespoke flavour. */
+  commissionOffer?: { text: string; wants: Want[]; dueDay: number };
+  /** A regular collecting a commission you've handed in. */
+  pickupId?: string;
 }
 
 export interface Visit {
@@ -427,7 +437,7 @@ export interface Outcome {
 
 export type DayEventKind =
   | 'delivery' | 'stockout' | 'regular_join' | 'regular_leave' | 'caught' | 'knockoff' | 'suspicious' | 'restock'
-  | 'broke' | 'return' | 'fine' | 'id_refused' | 'theft' | 'good_advice';
+  | 'broke' | 'return' | 'fine' | 'id_refused' | 'theft' | 'good_advice' | 'commission';
 
 export interface DayEvent {
   kind: DayEventKind;
@@ -534,13 +544,44 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
     visitors.push({ ...base(), kind: 'return', name: r.customerName, archetype: r.archetype, regularId: r.regularId, returnOf: r });
   }
 
+  // Commissions: missed deadlines fail, and handed-in ones get collected today.
+  for (const c of shop.commissions) {
+    const r = shop.regulars.find((x) => x.id === c.regularId);
+    if ((c.status === 'open' || c.status === 'ready') && (!r || r.gone)) {
+      c.status = 'cancelled';
+      continue;
+    }
+    if (c.status === 'open' && c.dueDay < day) {
+      c.status = 'failed';
+      if (r) r.loyalty = clamp(r.loyalty - 20);
+      shop.reputation = clamp(shop.reputation - 1);
+      events.push({ kind: 'commission', text: `You missed ${c.regularName}'s deadline (day ${c.dueDay}). They're gutted.` });
+    }
+  }
+  const pickups = new Map(shop.commissions.filter((c) => c.status === 'ready').map((c) => [c.regularId, c.id]));
+  let live = shop.commissions.filter((c) => c.status === 'open' || c.status === 'ready').length;
+
   // Regulars.
   for (const r of shop.regulars.filter((x) => !x.gone)) {
-    if (rng() > 0.25 + r.loyalty / 200) {
+    const pickupId = pickups.get(r.id);
+    if (!pickupId && rng() > 0.25 + r.loyalty / 200) {
       r.loyalty = clamp(r.loyalty - 0.5);
       continue;
     }
-    visitors.push({ ...base(), kind: 'regular', name: r.name, archetype: r.archetype, regularId: r.id });
+    const v: Omit<Visitor, 'idx'> = { ...base(), kind: 'regular', name: r.name, archetype: r.archetype, regularId: r.id, pickupId };
+    visitors.push(v);
+  }
+  // At most one new commission offer a day, from a loyal regular who's in today.
+  const askers = visitors.filter((v) => {
+    const r = shop.regulars.find((x) => x.id === v.regularId);
+    return v.kind === 'regular' && !v.pickupId && r && r.loyalty >= 35
+      && !shop.commissions.some((c) => c.regularId === r.id && (c.status === 'open' || c.status === 'ready'));
+  });
+  if (askers.length && canMakeOwn(shop) && live < 2 && rng() < 0.15) {
+    const v = rngPick(rng, askers);
+    const dueDay = day + 3 + Math.floor(rng() * 3);
+    v.commissionOffer = { ...makeBrief(v.archetype, data, rng, dueDay), dueDay };
+    live++;
   }
 
   // Walk-ins, some of whom look young.
@@ -638,8 +679,11 @@ function sell(s: DaySession, v: Visitor, l: Listing, qty: number, data: GameData
   return spent;
 }
 
+/** Reputation change. Gains shrink as you near the top, so 100 has to be earned. */
 function rep(s: DaySession, d: number): void {
-  s.shop.reputation = clamp(s.shop.reputation + d);
+  const r = s.shop.reputation;
+  const scaled = d > 0 ? d * clamp((100 - r) / 50, 0.1, 1) : d;
+  s.shop.reputation = clamp(r + scaled);
 }
 
 function regularOf(s: DaySession, v: Visitor): Regular | undefined {
@@ -777,6 +821,30 @@ export function step(input: DaySession, data: GameData): StepResult {
     });
   }
 
+  if (v.pickupId) {
+    const c = s.shop.commissions.find((x) => x.id === v.pickupId);
+    if (c?.status === 'ready' && c.product) {
+      return enc({
+        kind: 'pickup', title: 'Commission pick-up',
+        line: `Is it ready? I've been looking forward to this all week!`,
+        detail: `Their brief: “${c.text}” You're handing over ${c.product.brand.name}.`,
+        options: [{ id: 'handover', label: `Hand over ${c.product.brand.name}` }],
+      });
+    }
+  }
+
+  if (v.commissionOffer) {
+    return enc({
+      kind: 'commission', title: `${v.name} has a request`,
+      line: v.commissionOffer.text,
+      detail: `Design it in the Lab and hand it in before you open on day ${v.commissionOffer.dueDay}. They'll collect it at your next opening.`,
+      options: [
+        { id: 'accept', label: 'I\'ll make it for you', hint: 'Nail it: big loyalty, a tip, a friend, and a signature product' },
+        { id: 'decline', label: 'Sorry, not this week', hint: 'They\'ll understand. Mostly.' },
+      ],
+    });
+  }
+
   // Rivals may be caught by staff before they reach the counter.
   if (v.kind === 'rival') {
     const rival = s.shop.rivals.find((r) => r.id === v.rivalId);
@@ -877,6 +945,65 @@ export function resolve(input: DaySession, choice: string, data: GameData): { se
     return { session: s, visit, outcome };
   };
   const none = (extra: Partial<Visit> = {}): Visit => ({ name: v.name, archetype: v.archetype, regularId: v.regularId, rivalId: v.rivalId, qty: 0, spent: 0, kind: v.kind, young: v.looksYoung, ...extra });
+
+  // Commission collected.
+  if (choice === 'handover' && v.pickupId) {
+    const c = s.shop.commissions.find((x) => x.id === v.pickupId);
+    if (c?.product) {
+      const score = c.score ?? 0;
+      const price = c.product.brand.price;
+      c.status = 'delivered';
+      c.deliveredDay = s.day;
+      const great = score >= COMMISSION_GREAT;
+      const ok = score >= COMMISSION_OK;
+      const tip = round2(great ? price * 3 : ok ? price : 0);
+      s.revenue += tip;
+      if (regular) regular.loyalty = clamp(regular.loyalty + (great ? 25 : ok ? 8 : -15));
+      rep(s, great ? 2 : ok ? 0.5 : -0.5);
+      if (great) {
+        if (regular) regular.favourite = c.product.id;
+        const active = s.shop.regulars.filter((x) => !x.gone).length;
+        if (active < tierOf(s.shop).maxRegulars) {
+          const friend: Regular = {
+            id: `R${s.shop.nextRegularId++}`, name: `${rngPick(rng, FIRST)}, ${v.name.split(' ')[0]}'s mate`, archetype: v.archetype,
+            loyalty: 50, favourite: c.product.id, visits: 0, joinedDay: s.day, lastVisitDay: s.day, gone: false,
+          };
+          s.shop.regulars.push(friend);
+          s.events.push({ kind: 'regular_join', text: `${v.name} brought a friend: ${friend.name} is a regular now.` });
+        }
+      }
+      s.events.push({
+        kind: 'commission',
+        text: great ? `${v.name} loved ${c.product.brand.name} (${Math.round(score)}/100) and tipped ${tip} cr. It's now a signature product.`
+          : ok ? `${v.name} liked ${c.product.brand.name} well enough (${Math.round(score)}/100).`
+            : `${v.name} was disappointed with ${c.product.brand.name} (${Math.round(score)}/100).`,
+      });
+      return finish(none({ spent: tip, note: 'collected a commission' }), {
+        line: great ? 'This is PERFECT. Exactly what I asked for. Keep the change!' : ok ? 'Oh, nice. Thanks for doing this.' : 'Hmm. Not really what I asked for, but thanks.',
+        tone: great ? 'good' : ok ? 'neutral' : 'bad',
+        pop: great ? `+${Math.round(tip)} cr tip` : ok ? 'Pleased' : 'Let down',
+      });
+    }
+  }
+
+  // Commission offered: accept or decline, then they shop as normal.
+  if ((choice === 'accept' || choice === 'decline') && v.commissionOffer) {
+    const o = v.commissionOffer;
+    if (choice === 'accept' && v.regularId) {
+      s.shop.commissions.push({
+        id: `C${s.shop.nextCommissionId++}`, regularId: v.regularId, regularName: v.name, archetype: v.archetype,
+        text: o.text, wants: o.wants, createdDay: s.day, dueDay: o.dueDay, status: 'open',
+      });
+      s.events.push({ kind: 'commission', text: `${v.name} commissioned a flavour, due by day ${o.dueDay}. Find it in the Lab under Orders.` });
+    } else if (regular) regular.loyalty = clamp(regular.loyalty - 3);
+    const res = autoShop(s, v, data, rng);
+    const line = choice === 'accept' ? `Brilliant! See you by day ${o.dueDay}.` : 'Ah, fair enough.';
+    if (res.listing) {
+      const visit = completePurchase(s, v, res.listing, res.score, data, rng);
+      return finish(visit, { line, tone: choice === 'accept' ? 'good' : 'neutral', pop: choice === 'accept' ? 'Commission!' : `+${Math.round(visit.spent)} cr` });
+    }
+    return finish(none({ walkout: res.walkout }), { line, tone: choice === 'accept' ? 'good' : 'neutral', pop: choice === 'accept' ? 'Commission!' : '…' });
+  }
 
   // Faulty return.
   if (v.kind === 'return' && v.returnOf) {
@@ -1010,7 +1137,21 @@ export function defaultChoice(e: Encounter): string {
     case 'probe': return 'vague';
     case 'shoplift': return 'ignore';
     case 'return': return 'refund';
+    case 'commission': return 'decline';
+    case 'pickup': return 'handover';
   }
+}
+
+/** Hand a Lab formula in for a commission. It's collected at your next opening. */
+export function submitCommission(shop: ShopState, id: string, product: Product, data: GameData): ShopState {
+  const c0 = shop.commissions.find((x) => x.id === id);
+  if (!c0 || (c0.status !== 'open' && c0.status !== 'ready') || shop.day > c0.dueDay || !product.notes.length) return shop;
+  const s = clone(shop);
+  const c = s.commissions.find((x) => x.id === id)!;
+  c.product = clone(product);
+  c.score = scoreCommission(c.wants, c.archetype, product, data).score;
+  c.status = 'ready';
+  return s;
 }
 
 /** Close up: wages, rent, loyalty, auto-restock, summary. */
@@ -1081,4 +1222,45 @@ export function simulateDay(shop: ShopState, data: GameData, choose: (e: Encount
     if (r.encounter) s = resolve(s, choose(r.encounter, s), data).session;
   }
   return endDay(s, data);
+}
+
+export interface Forecast {
+  days: number;
+  unitsPerDay: number;
+  revenuePerDay: number;
+  /** Takings minus build cost and refunds, before rent. */
+  profitPerDay: number;
+  returnsPerDay: number;
+}
+
+/**
+ * How a product would do on its own in your current shop: a short trial run of
+ * the real day sim (same tier, reputation and upgrades; no rivals), with staff
+ * making the cautious choices. Deterministic for a given product and shop.
+ */
+export function forecast(product: Product, shop: ShopState, data: GameData, days = 5): Forecast {
+  let t: ShopState = {
+    ...newShop(deriveSeed(shop.seed, `forecast:${product.id}:${product.brand.price}`)),
+    tier: shop.tier, reputation: shop.reputation, upgrades: [...(shop.upgrades ?? [])], cash: 1e9, rivals: [],
+  };
+  t = addListing(t, product, data);
+  t.listings[0].price = product.brand.price;
+  t.listings[0].stock = 9999;
+  const cost = unitCost(product, data).total;
+  let units = 0, revenue = 0, refunds = 0, returns = 0;
+  for (let i = 0; i < days; i++) {
+    const { shop: next, report } = simulateDay(t, data);
+    units += report.sales[product.id] ?? 0;
+    revenue += report.revenue;
+    refunds += report.refunds;
+    returns += report.visits.filter((v) => v.kind === 'return').length;
+    t = next;
+  }
+  return {
+    days,
+    unitsPerDay: round1(units / days),
+    revenuePerDay: round1(revenue / days),
+    profitPerDay: round1((revenue - refunds - units * cost) / days),
+    returnsPerDay: round1(returns / days),
+  };
 }

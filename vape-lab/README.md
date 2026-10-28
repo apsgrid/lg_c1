@@ -32,6 +32,10 @@ Switch from **Lab** to **Shop** in the top bar.
 
 **Shop upgrades.** Each shop level unlocks upgrades you buy with cash and keep when you move: a hand-painted sign and card reader (Garage), a comfy sofa, tasting bar and CCTV (Small store), a neon window and extra shelving (Medium), and a lounge corner (Large). Each one changes the sim (more customers, more advice requests, faster loyalty, shoplifter spotting, extra slots, a higher reputation floor) and appears in the 3D shop. They are defined in one catalog, `UPGRADES` in `src/sim/shop.ts`.
 
+**Commissions.** Once the Lab is open, loyal regulars sometimes ask for something bespoke ("It's my partner's birthday on day 8. Something really icy, and it has to have mango in it."). Accept at the counter, then design it in the Lab's **Orders** tab, which checks each part of the brief live against the formula on your bench and shows a 0-100 match: 65% from the brief and 35% from how that customer type rates it. Hand it in before the deadline and they collect it at your next opening. 75+ is a triumph: a tip, a big loyalty boost, a friend who becomes a regular, and the formula saved to your Library as a signature product. Below 50 they're let down, and missing the deadline costs loyalty and reputation. The logic is in `src/sim/commission.ts`.
+
+**One set of numbers.** The Lab's Test tab forecasts how a product would sell in your actual shop by running five days of the real shop sim (same level, reputation and upgrades). Each product on the shelf shows how every customer type rates it at its current price.
+
 **Serving.** Press **Open up** and customers come in one at a time. Most browse and buy on their own; some stop at the counter:
 - **Advice:** "Got anything really icy?" Pick a product. A good match earns reputation and loyalty and may win a regular; a poor one loses the sale.
 - **ID checks:** a customer looks young. Ask for ID, or serve them. Selling to a minor costs a fine and a big reputation hit.

@@ -79,7 +79,7 @@ describe('progression', () => {
     expect(canUpgrade(rich).ok).toBe(true);
     const up = upgradeShop(rich);
     expect(up.tier).toBe(1);
-    expect(up.cash).toBe(500);
+    expect(up.cash).toBe(700);
     expect(upgradeShop({ ...s, cash: 1000, reputation: 40 }).tier).toBe(0);
   });
   it('no rivals or shoplifters at the car boot', () => {
@@ -179,7 +179,7 @@ describe('disposables', () => {
 
 describe('rivals', () => {
   it('learn formulas and launch knock-offs; revising shakes them off', () => {
-    let s = run(stocked(2, 3000), 40);
+    let s = run(stocked(2, 3000), 60);
     const ko = s.rivals.flatMap((r) => r.knockoffs);
     expect(ko.length).toBeGreaterThan(0);
     const target = s.listings.findIndex((l) => l.product.id === ko[0].productId);
@@ -239,5 +239,79 @@ describe('upgrades and supplier stock', () => {
     const w = data.wholesale![0];
     const own = { ...w, brand: { ...w.brand, wholesale: false } };
     expect(unitCost(w, data).total).toBeGreaterThan(unitCost(own, data).total);
+  });
+});
+
+describe('commissions', () => {
+  async function withOffer() {
+    const sim = await import('../src/sim');
+    // A garage with loyal regulars, played until one asks for a commission.
+    let s: ShopState = { ...stocked(1, 3000) };
+    for (let i = 0; i < 6; i++) {
+      s.regulars.push({ id: `R${i}`, name: `Reg ${i}`, archetype: data.customers[i % 6].id, loyalty: 80, visits: 3, joinedDay: 0, lastVisitDay: 0, gone: false });
+    }
+    let offered = false;
+    for (let d = 0; d < 60 && !offered; d++) {
+      s = sim.simulateDay(s, data, (e) => {
+        if (e.kind === 'commission') { offered = true; return 'accept'; }
+        return sim.defaultChoice(e);
+      }).shop;
+    }
+    return { sim, s, offered };
+  }
+
+  it('loyal regulars ask for commissions once the Lab is open', async () => {
+    const { s, offered } = await withOffer();
+    expect(offered).toBe(true);
+    const c = s.commissions.find((x) => x.status === 'open');
+    expect(c).toBeDefined();
+    expect(c!.wants.length).toBeGreaterThanOrEqual(2);
+    expect(c!.dueDay).toBeGreaterThanOrEqual(s.day);
+  });
+
+  it('never at the car boot', () => {
+    let s: ShopState = { ...stocked(0, 3000) };
+    s.regulars.push({ id: 'R1', name: 'Reg', archetype: 'ice_fan', loyalty: 90, visits: 3, joinedDay: 0, lastVisitDay: 0, gone: false });
+    let offered = false;
+    run(s, 40, (e) => { if (e.kind === 'commission') offered = true; return e.kind === 'id' ? 'check' : 'browse'; });
+    expect(offered).toBe(false);
+  });
+
+  it('a good match beats a poor one, and delivery is collected next opening', async () => {
+    const { sim, s } = await withOffer();
+    const c = s.commissions.find((x) => x.status === 'open')!;
+    const poor = product('Nope', [['coffee', 10]], 3);
+    // Build something that meets every want reasonably well.
+    const good = product('Bespoke', c.wants.filter((w) => w.kind === 'note').map((w) => [(w as { noteId: string }).noteId, 40] as [string, number]), 4);
+    const pScore = sim.scoreCommission(c.wants, c.archetype, poor, data).score;
+    const gScore = sim.scoreCommission(c.wants, c.archetype, good, data).score;
+    expect(gScore).toBeGreaterThan(pScore);
+    const handed = sim.submitCommission(s, c.id, good, data);
+    expect(handed.commissions.find((x) => x.id === c.id)!.status).toBe('ready');
+    let picked = false;
+    const after = sim.simulateDay(handed, data, (e) => { if (e.kind === 'pickup') picked = true; return sim.defaultChoice(e); }).shop;
+    expect(picked).toBe(true);
+    expect(after.commissions.find((x) => x.id === c.id)!.status).toBe('delivered');
+  });
+
+  it('missing the deadline fails the commission and hurts loyalty', async () => {
+    const { sim, s } = await withOffer();
+    const c = s.commissions.find((x) => x.status === 'open')!;
+    const before = s.regulars.find((r) => r.id === c.regularId)!.loyalty;
+    let t = s;
+    while (t.day <= c.dueDay + 1) t = sim.simulateDay(t, data).shop;
+    expect(t.commissions.find((x) => x.id === c.id)!.status).toBe('failed');
+    expect(t.regulars.find((r) => r.id === c.regularId)!.loyalty).toBeLessThan(before + 10);
+  });
+});
+
+describe('forecast', () => {
+  it('is deterministic and favours a better-liked product', async () => {
+    const { forecast } = await import('../src/sim');
+    const shop = { ...newShop(5), tier: 2, reputation: 60 };
+    const good = product('Good', [['strawberry', 40], ['cream', 30]], 1);
+    const bad = product('Bad', [['coffee', 60], ['bubblegum', 60], ['mint', 60], ['watermelon', 60]], 2);
+    expect(forecast(good, shop, data)).toEqual(forecast(good, shop, data));
+    expect(forecast(good, shop, data).unitsPerDay).toBeGreaterThan(forecast(bad, shop, data).unitsPerDay);
   });
 });

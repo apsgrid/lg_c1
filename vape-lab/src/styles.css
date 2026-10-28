@@ -267,6 +267,37 @@ input[type='color'] { width: 40px; height: 32px; padding: 0; border: 1px solid v
 .tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #2f2b40; text-transform: capitalize; }
 .tag.bad { color: var(--bad); background: rgba(255, 90, 106, 0.12); }
 
+/* Next step + ratings */
+.next-step { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(58, 215, 255, 0.08); border: 1px solid rgba(58, 215, 255, 0.35); font-size: 13px; }
+.ns-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-2); flex: none; }
+.ratings { display: flex; gap: 4px; flex-wrap: wrap; }
+.rating { display: inline-flex; gap: 3px; align-items: center; font-size: 12px; padding: 1px 6px; border-radius: 999px; background: #2a2638; box-shadow: inset 0 -2px 0 var(--sc); }
+.rating b { font-variant-numeric: tabular-nums; }
+
+/* Orders (commissions) */
+.order { border: 1px solid rgba(255, 217, 106, 0.45); border-radius: var(--radius); background: #221f2f; padding: 10px 12px; display: grid; gap: 8px; margin-bottom: 10px; }
+.order.ready { border-color: var(--good); }
+.order-head { display: flex; gap: 10px; align-items: center; }
+.order-head > div { flex: 1; min-width: 0; }
+.order-head .avatar { font-size: 26px; }
+.due { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #2f2b40; }
+.due.warn { color: var(--mid); }
+.due.bad { color: var(--bad); }
+.bubble.small { font-size: 13.5px; padding: 8px 12px; }
+.handed { font-size: 12.5px; color: var(--good); }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.checks li { display: flex; gap: 8px; font-size: 13px; }
+.tick { width: 1.2em; text-align: center; font-weight: 800; flex: none; }
+.checks .met .tick { color: var(--good); }
+.checks .part .tick { color: var(--mid); }
+.checks .miss .tick { color: var(--bad); }
+.order-score { display: flex; justify-content: space-between; font-size: 13px; }
+.order button { justify-self: start; }
+.past-order { display: flex; justify-content: space-between; gap: 8px; padding: 4px 6px; font-size: 13px; }
+.past-order.failed b { color: var(--bad); }
+.reg-order { color: var(--gold); }
+.encounter.enc-commission, .encounter.enc-pickup { border-color: var(--gold); }
+
 /* Upgrades */
 .upgrades { display: grid; gap: 6px; }
 .upgrade { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: #221f2f; border: 1px solid var(--line); }

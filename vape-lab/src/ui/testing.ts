@@ -1,4 +1,5 @@
-import { runTest, type TestResult } from '../sim';
+import { forecast, runTest, tierOf, type Forecast, type Product, type TestResult } from '../sim';
+import { shopState } from '../shopState';
 import { data, recordResult, replaceProduct, setBusy, state, subscribe, update } from '../state';
 import { storage } from '../store/storage';
 import type { LabScene } from '../view/scene';
@@ -6,6 +7,19 @@ import { bar, clear, h, scoreColour } from './dom';
 import { toast } from './toast';
 
 let sceneRef: LabScene | null = null;
+
+const forecasts = new Map<string, Forecast>();
+/** The real shop sim's view of this product, cached per product and shop level. */
+function shopForecast(p: Product): Forecast {
+  const s = shopState.shop;
+  const key = `${p.id}|${p.brand.price}|${p.brand.format}|${p.brand.tier}|${s.tier}|${Math.round(s.reputation / 5)}|${(s.upgrades ?? []).join(',')}`;
+  let f = forecasts.get(key);
+  if (!f) {
+    f = forecast(p, s, data);
+    forecasts.set(key, f);
+  }
+  return f;
+}
 
 /** Full test flow: animation, then the pure sim result, discovery reveal and history. */
 export async function runTestBatch(): Promise<TestResult | null> {
@@ -86,7 +100,11 @@ export function mountTesting(root: HTMLElement, scene: LabScene): void {
         stat('Reputation risk', r.reputationRisk.toFixed(0), 'from dependence/intensity', r.reputationRisk > 40 ? 'var(--bad)' : undefined),
         stat('Unit cost', `${r.unitCost.total.toFixed(2)}`, 'credits (fictional)'),
         stat('Margin', `${r.margin.toFixed(2)}`, 'credits / unit', r.margin > 0 ? 'var(--good)' : 'var(--bad)'),
-        stat('Weekly profit', r.projectedProfit.toFixed(0), 'projected credits', undefined, prev?.projectedProfit, r.projectedProfit),
+        ...(stale ? [] : (() => {
+          const f = shopForecast(state.product);
+          const where = tierOf(shopState.shop).name.toLowerCase();
+          return [stat('In your shop', f.profitPerDay.toFixed(0), `cr profit/day · ${f.unitsPerDay} sold/day at your ${where}${f.returnsPerDay ? ` · ${f.returnsPerDay} returns/day` : ''}`, f.profitPerDay > 0 ? 'var(--good)' : 'var(--bad)')];
+        })()),
       ));
       const cards = h('div.cards');
       r.reactions.forEach((rx, i) => {

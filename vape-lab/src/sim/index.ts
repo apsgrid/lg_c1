@@ -12,3 +12,4 @@ export * from './assist';
 export * from './util';
 export * from './product';
 export * from './shop';
+export * from './commission';

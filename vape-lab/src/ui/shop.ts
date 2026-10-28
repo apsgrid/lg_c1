@@ -1,7 +1,7 @@
 import {
   addListing, beginDay, buyUpgrade, canMakeOwn, canUpgrade, UPGRADES, upgradeStatus, defaultChoice, endDay, faultChance, intelEstimate, KNOCKOFF_AT, maxOrder, MAX_STOCK,
   nextTier, orderStock, removeListing, resolve, reviseListing, setAutoRestock, setPrice, setVigilance, shelfSlots, step,
-  tierOf, unitCost, upgradeShop, VIGILANCE,
+  COMMISSION_GREAT, runTest, tierOf, unitCost, upgradeShop, VIGILANCE,
   type DayEventKind, type DaySession, type Product, type ShopState, type Visit,
 } from '../sim';
 import { notifyShop, onShop, resetShop, saveShop, shopAction, shopState } from '../shopState';
@@ -134,6 +134,15 @@ export async function openShop(): Promise<void> {
   }
 
   const { shop, report } = endDay(session, data);
+  // Triumphant commissions become signature products in your Library.
+  const formulas = storage.loadFormulas();
+  for (const c of shop.commissions) {
+    if (c.status !== 'delivered' || c.deliveredDay !== report.day || (c.score ?? 0) < COMMISSION_GREAT || !c.product) continue;
+    if (formulas.some((f) => f.product.id === c.product!.id)) continue;
+    formulas.unshift({ slotId: `F${Date.now().toString(36)}${c.id}`, lineage: `L${c.id}`, savedAt: Date.now(), product: c.product, lastAppeal: c.score });
+    toast(`★ ${c.product.brand.name} is now a signature product (saved to your Library).`, 'gold');
+  }
+  storage.saveFormulas(formulas);
   shopState.shop = shop;
   shopState.lastReport = report;
   shopState.live = null;
@@ -152,6 +161,7 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
     type: 'text', maxLength: 28, value: shopState.shop.name, placeholder: 'Name your shop', 'aria-label': 'Shop name',
     onchange: (e: Event) => shopAction((s) => ({ ...s, name: (e.target as HTMLInputElement).value.trim() || 'My Vape Store' })),
   });
+  const nextStep = h('div.next-step');
   const tierCard = h('div.tier-card');
   const upgradesHead = h('h3', {}, 'Shop upgrades');
   const upgradesEl = h('div.upgrades');
@@ -167,6 +177,7 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
   root.append(
     h('label', { for: 'shop-name' }, h('h3', {}, 'Shop name')),
     nameInput,
+    nextStep,
     status,
     tierCard,
     upgradesHead,
@@ -219,6 +230,20 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
     if (document.activeElement !== nameInput) nameInput.value = s.name;
     nameInput.disabled = busy;
     openBtn.textContent = busy ? 'Skip to closing (staff take over)' : `Open up: day ${s.day}`;
+
+    // What to do next, for when it isn't obvious.
+    clear(nextStep);
+    const stocked = s.listings.some((l) => l.stock + l.incoming > 0);
+    const openOrders = s.commissions.filter((c) => c.status === 'open');
+    const hint = busy ? null
+      : !s.listings.length ? (canMakeOwn(s) ? 'Pick a product below to put on display: a supplier one, or your own from the Lab (save it in the Library first).' : 'Pick some supplier stock below to sell from your boot.')
+        : !stocked ? 'Order some stock: it arrives tomorrow morning.'
+          : openOrders.length ? `${openOrders[0].regularName} is waiting on a commission (due day ${openOrders[0].dueDay}). Make it in the Lab → Orders.`
+            : canUpgrade(s).ok ? `You can afford the ${nextTier(s)?.name.toLowerCase()}! Move up below.`
+              : s.tier === 1 && !s.listings.some((l) => !l.product.brand.wholesale) ? 'The Lab is open! Design your own flavour, save it to the Library, then put it out here for better margins.'
+                : `Press Open up to start day ${s.day}.`;
+    nextStep.hidden = !hint;
+    if (hint) nextStep.append(h('span.ns-label', {}, 'Next'), h('span', {}, hint));
 
     clear(status);
     status.append(
@@ -289,6 +314,10 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
           h('span.tag', {}, p.brand.tier),
           h('span.tag', { class: fc >= 0.1 ? 'bad' : '' }, `~${Math.round(fc * 100)}% faulty`),
         ),
+        h('div.ratings', { title: 'How each customer type rates it at this price' }, ...runTest({ ...p, brand: { ...p.brand, price: l.price } }, data).reactions.map((rx) => {
+          const c = data.customers.find((x) => x.id === rx.customerId);
+          return h('span.rating', { title: `${c?.name}: ${Math.round(rx.score)}`, style: `--sc:${scoreColour(rx.score)}` }, c?.avatar ?? '?', h('b', {}, Math.round(rx.score)));
+        })),
         kos.length ? h('div.ko', {}, `Knocked off by ${kos.map((k) => `${k.rival.name} (“${k.k.name}”)`).join(', ')}`) : null,
         h('label.inline', {}, h('span', {}, 'Price ', priceVal, h('span.muted', {}, ` · cost ${cost.toFixed(2)} · margin `), h('span', { class: margin > 0 ? 'good' : 'bad' }, margin.toFixed(2))),
           h('input', {
@@ -358,7 +387,7 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
 
 const EVENT_ICON: Record<DayEventKind, string> = {
   delivery: '📦', stockout: '⚠', regular_join: '★', regular_leave: '☆', caught: '🛑', knockoff: '🕵', suspicious: '👀',
-  restock: '↻', broke: '💸', return: '↩', fine: '⚖', id_refused: '🪪', theft: '🫳', good_advice: '💬',
+  restock: '↻', broke: '💸', return: '↩', fine: '⚖', id_refused: '🪪', theft: '🫳', good_advice: '💬', commission: '📜',
 };
 
 function visitLine(s: ShopState, v: Visit): string {
@@ -492,6 +521,8 @@ export function mountRegulars(root: HTMLElement): void {
           h('div.fine', {}, `${c?.name} · ${r.visits} visit${r.visits === 1 ? '' : 's'} · since day ${r.joinedDay}`),
           h('div.fine', {}, 'Favourite: ', h('span', { class: fav ? '' : 'bad' }, fav ? `${fav.product.brand.name}${fav.stock ? '' : ' (sold out!)'}` : `${productName(s, r.favourite)} (not stocked)`)),
           h('div.loyalty', {}, h('span.fine', {}, 'Loyalty'), bar(r.loyalty, scoreColour(r.loyalty))),
+          ...s.commissions.filter((c) => c.regularId === r.id && (c.status === 'open' || c.status === 'ready')).map((c) =>
+            h('div.fine.reg-order', {}, c.status === 'ready' ? `📜 Collecting ${c.product?.brand.name} next opening` : `📜 Waiting on your commission (due day ${c.dueDay})`)),
         ),
       ));
     }

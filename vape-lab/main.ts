@@ -10,6 +10,7 @@ import { mountLibrary } from './src/ui/library';
 import { mountAssist, mountAuto, mountModeSwitch } from './src/ui/modes';
 import { mountCounter, mountLedger, mountRegulars, mountRivals, mountShelf, openShop } from './src/ui/shop';
 import { mountTesting, runTestBatch } from './src/ui/testing';
+import { mountOrders } from './src/ui/orders';
 import { mountTuning } from './src/ui/tuning';
 import { LabScene } from './src/view/scene';
 import { ShopScene } from './src/view/shopScene';
@@ -76,6 +77,7 @@ const lab = makeView('lab', 'Mix', [
   { id: 'tune', label: 'Tune', mount: (el) => mountTuning(el) },
   { id: 'brand', label: 'Brand', mount: (el) => mountBranding(el) },
   { id: 'test', label: 'Test', mount: (el) => mountTesting(el, labScene) },
+  { id: 'orders', label: 'Orders', mount: (el) => mountOrders(el, () => lab.buttons.get('orders')?.classList.add('badge')) },
   { id: 'journal', label: 'Journal', mount: (el) => mountJournal(el) },
   { id: 'library', label: 'Library', mount: (el) => mountLibrary(el) },
   { id: 'auto', label: 'Auto', mount: (el) => mountAuto(el) },
@@ -93,6 +95,7 @@ subscribe((reason) => {
   if (reason === 'result') lab.select('test');
 });
 lab.buttons.get('journal')?.addEventListener('click', () => lab.buttons.get('journal')?.classList.remove('badge'));
+lab.buttons.get('orders')?.addEventListener('click', () => lab.buttons.get('orders')?.classList.remove('badge'));
 labScene.setProduct(state.product);
 subscribe(() => labScene.setProduct(state.product));
 
