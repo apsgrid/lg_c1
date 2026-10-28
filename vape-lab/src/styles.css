@@ -313,6 +313,16 @@ input[type='color'] { width: 40px; height: 32px; padding: 0; border: 1px solid v
 .lock-card p { margin: 0; color: var(--muted); }
 .lock-icon { font-size: 40px; }
 
+/* Queue */
+.queue { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin-bottom: 10px; font-size: 12.5px; }
+.queue-bar { height: 8px; border-radius: 4px; background: #2f2b40; overflow: hidden; }
+.queue-bar > div { height: 100%; background: var(--good); transition: width 0.4s ease, background 0.4s; }
+.queue.warn .queue-bar > div { background: var(--mid); }
+.queue.bad .queue-bar > div { background: var(--bad); }
+.queue.bad .fine { color: var(--bad); }
+.opt-time { margin-left: auto; flex: none; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #2f2b40; color: var(--muted); align-self: center; white-space: nowrap; }
+.opt-time.slow { color: var(--mid); }
+
 /* Counter conversations */
 .live-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
 .live-head button { margin-left: auto; }
@@ -379,6 +389,7 @@ details.danger { margin-top: 24px; color: var(--muted); }
   .view-seg { margin-left: auto; }
   .cash-chip { margin-left: auto; }
   #app.encounter-open { grid-template-rows: auto minmax(140px, 22%) 1fr auto; }
+  .enc-options.recs { grid-template-columns: 1fr; }
   .panel.left, .panel.right { grid-area: panel; border: none; padding-top: 12px; }
   .panel.left { display: none; }
   #app.show-left .panel.left { display: block; }

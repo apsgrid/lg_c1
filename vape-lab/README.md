@@ -43,6 +43,14 @@ Switch from **Lab** to **Shop** in the top bar.
 - **Nosy questions:** "What exactly goes into this one?" Genuine fans love hearing about it, but it might be a rival's secret shopper taking notes.
 - **Shoplifters:** something goes missing and you choose who to stop out of three customers. Stopping the right one recovers the stock; stopping the wrong one loses reputation. A security guard points out the thief.
 
+**Trade-offs at the counter.** Every choice takes time, shown on its button, and the queue meter fills while you're busy. Once it's long, people give up and leave. So the careful answer always costs something:
+- Asking for ID takes time, and some adults take offence and walk out (an ID scanner fixes both). Serving a minor is still never worth it.
+- Explaining a recipe wins fans but takes a while and teaches rivals. Fans ask too, so a nosy question isn't proof of a spy.
+- Chasing a shoplifter leaves the counter empty. CCTV narrows it to two suspects, a guard to one.
+- Recommendations sell better but are slower than letting people browse.
+
+Watchful staff and the second till upgrade keep the queue moving.
+
 **Skip** hands the rest of the day to your staff, who make the cautious choice each time.
 
 **Disposables.** Set a product's format in the Lab's Brand tab. Disposables cost half as much to make, so margins are high, but far more of them are faulty (20% at budget tier, 12% at standard, 6% at premium) and come back as returns over the next couple of days.

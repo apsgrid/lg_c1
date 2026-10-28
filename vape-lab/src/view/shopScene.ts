@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { shelfSlots, tierOf, type GameData, type ShopState } from '../sim';
 import { drawLabel } from './label';
+import { blobShadowTexture, Post } from './post';
 
 const ARCHETYPE_COLOUR: Record<string, string> = {
   fruit_fanatic: '#ff6f7d', anti_sweet: '#9aa3b5', ice_fan: '#5ad7ff',
@@ -11,6 +12,7 @@ const ARCHETYPE_COLOUR: Record<string, string> = {
 
 export interface Shopper {
   archetype: string;
+  colour?: string;
   regular?: boolean;
   young?: boolean;
 }
@@ -39,6 +41,7 @@ interface Walker {
   onArrive?: () => void;
   popAt?: number;
   popText?: { text: string; colour: string };
+  moving: boolean;
   done: boolean;
 }
 
@@ -74,7 +77,8 @@ function disposeTree(o: THREE.Object3D): void {
       x.geometry?.dispose();
       const mats = Array.isArray(x.material) ? x.material : [x.material];
       for (const m of mats) {
-        (m as THREE.MeshStandardMaterial).map?.dispose();
+        const map = (m as THREE.MeshStandardMaterial).map;
+        if (map && !map.userData.shared) map.dispose();
         m.dispose();
       }
     }
@@ -104,6 +108,7 @@ export class ShopScene {
   private decorKey = '';
   private layout!: Layout;
   private you!: THREE.Group;
+  private post: Post;
 
   constructor(private container: HTMLElement, private data: GameData) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -128,6 +133,7 @@ export class ShopScene {
     this.signTex.colorSpace = THREE.SRGBColorSpace;
 
     this.scene.add(this.env, this.displays, this.decor, this.people);
+    this.post = new Post(this.renderer, this.scene, this.camera, { bloom: 0.5, envIntensity: 0.5 });
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
   }
@@ -586,35 +592,86 @@ export class ShopScene {
 
   // --- People -----------------------------------------------------------------------------
 
-  private makePerson(colour: string, regular = false, isYou = false, young = false): THREE.Group {
+  private makePerson(colour: string, regular = false, isYou = false, young = false, seed = Math.random()): THREE.Group {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.55, 4, 12), mat(colour));
-    body.position.y = 0.5;
-    body.castShadow = true;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), mat('#f1d3b8', { roughness: 0.7 }));
-    head.position.y = 1.08;
+    const skinTones = ['#f1d3b8', '#e0b48f', '#c68e63', '#9a6440', '#6e452a'];
+    const hairTones = ['#2b1d14', '#5a3a22', '#a8743d', '#e3c27a', '#1d1b22', '#b8432f', '#8a8f99'];
+    const pick = <T,>(arr: T[], k: number) => arr[Math.floor(((seed * 9301 + k * 49297) % 1) * arr.length) % arr.length];
+    const skin = mat(pick(skinTones, 1), { roughness: 0.7 });
+    const cloth = mat(colour, { roughness: 0.65 });
+    const trousers = mat(pick(['#2a2c3a', '#3a3a44', '#4a3b2c', '#1f2a3d'], 2), { roughness: 0.8 });
+
+    // Soft blob shadow on the floor.
+    const shadow = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.75), new THREE.MeshBasicMaterial({ map: blobShadowTexture(), transparent: true, depthWrite: false }));
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.012;
+    g.add(shadow);
+
+    const body = new THREE.Group();
+    g.add(body);
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, 0.32, 4, 12), cloth);
+    torso.position.y = 0.78;
+    torso.castShadow = true;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), skin);
+    head.position.y = 1.18;
     head.castShadow = true;
-    g.add(body, head);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.165, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), mat(pick(hairTones, 3), { roughness: 0.9 }));
+    hair.position.y = 1.2;
+    hair.rotation.x = -0.25;
+    body.add(torso, head, hair);
+
+    // Limbs hang from pivots so they can swing while walking.
+    const limb = (len: number, r: number, m: THREE.Material, x: number, y: number) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, y, 0);
+      const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 3, 8), m);
+      mesh.position.y = -len / 2 - r;
+      mesh.castShadow = true;
+      pivot.add(mesh);
+      body.add(pivot);
+      return pivot;
+    };
+    const legL = limb(0.3, 0.07, trousers, -0.09, 0.5);
+    const legR = limb(0.3, 0.07, trousers, 0.09, 0.5);
+    const armL = limb(0.28, 0.055, cloth, -0.25, 0.98);
+    const armR = limb(0.28, 0.055, cloth, 0.25, 0.98);
+    armL.rotation.z = 0.12;
+    armR.rotation.z = -0.12;
+
     if (isYou) {
-      const apron = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.45, 0.05), mat('#1d1b22'));
-      apron.position.set(0, 0.55, 0.19);
-      g.add(apron);
+      const apron = new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.42, 0.04, 2, 0.02), mat('#1d1b22'));
+      apron.position.set(0, 0.72, 0.19);
+      body.add(apron);
     }
     if (regular) {
-      const badge = new THREE.Mesh(new THREE.OctahedronGeometry(0.07), new THREE.MeshStandardMaterial({ color: '#ffd96a', emissive: '#ffd96a', emissiveIntensity: 0.6 }));
-      badge.position.set(0, 1.42, 0);
+      const badge = new THREE.Mesh(new THREE.OctahedronGeometry(0.07), new THREE.MeshStandardMaterial({ color: '#ffd96a', emissive: '#ffd96a', emissiveIntensity: 1.6 }));
+      badge.position.set(0, 1.52, 0);
       g.add(badge);
     }
-    if (young) g.scale.setScalar(0.86);
+    g.userData.limbs = { legL, legR, armL, armR, body, phase: seed * 10 };
+    if (young) g.scale.setScalar(0.88);
     return g;
   }
 
+  /** Swing arms and legs while moving; settle when standing. */
+  private animateLimbs(g: THREE.Group, moving: boolean, t: number): void {
+    const L = g.userData.limbs as { legL: THREE.Group; legR: THREE.Group; armL: THREE.Group; armR: THREE.Group; body: THREE.Group; phase: number } | undefined;
+    if (!L) return;
+    const target = moving ? Math.sin(t * 9 + L.phase) * 0.55 : 0;
+    const ease = (o: THREE.Group, v: number) => { o.rotation.x += (v - o.rotation.x) * 0.3; };
+    ease(L.legL, target);
+    ease(L.legR, -target);
+    ease(L.armL, -target * 0.8);
+    ease(L.armR, target * 0.8);
+    L.body.position.y = moving ? Math.abs(Math.sin(t * 9 + L.phase)) * 0.035 : Math.sin(t * 1.5 + L.phase) * 0.006;
+  }
+
   private spawn(s: Shopper, path: THREE.Vector3[], waits: number[], opts: { delay?: number; hold?: boolean; onArrive?: () => void } = {}): Walker {
-    const group = this.makePerson(ARCHETYPE_COLOUR[s.archetype] ?? '#cccccc', s.regular, false, s.young);
+    const group = this.makePerson(s.colour ?? ARCHETYPE_COLOUR[s.archetype] ?? '#cccccc', s.regular, false, s.young);
     group.position.copy(path[0]);
     group.visible = !opts.delay;
     this.people.add(group);
-    const w: Walker = { group, path, waits, leg: 0, wait: 0, delay: opts.delay ?? 0, hold: !!opts.hold, onArrive: opts.onArrive, done: false };
+    const w: Walker = { group, path, waits, leg: 0, wait: 0, delay: opts.delay ?? 0, hold: !!opts.hold, onArrive: opts.onArrive, moving: false, done: false };
     this.walkers.push(w);
     return w;
   }
@@ -672,8 +729,7 @@ export class ShopScene {
     const colours = ['#9aa3b5', '#c69bff', '#ffc145'];
     for (let i = 0; i < n; i++) {
       const spot = (L.browse[i % L.browse.length] ?? L.counter).clone().add(new THREE.Vector3((i - 1) * 0.5, 0, 0.3));
-      const w = this.spawn({ archetype: 'x' }, [spot], [0], { hold: true });
-      (w.group.children[0] as THREE.Mesh).material = mat(colours[i % 3]);
+      const w = this.spawn({ archetype: 'x', colour: colours[i % 3] }, [spot], [0], { hold: true });
       const tag = textSprite(String(i + 1), '#ffd96a', 0.8);
       tag.position.set(0, 1.6, 0);
       w.group.add(tag);
@@ -725,6 +781,7 @@ export class ShopScene {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h, false);
+    this.post?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.fov = Math.min(62, 42 * Math.max(1, 1.4 / this.camera.aspect) ** 0.55);
     this.camera.updateProjectionMatrix();
@@ -740,6 +797,7 @@ export class ShopScene {
         if (w.delay <= 0) w.group.visible = true;
         continue;
       }
+      w.moving = false;
       if (w.wait > 0) {
         w.wait -= dt;
         continue;
@@ -775,11 +833,13 @@ export class ShopScene {
       } else {
         pos.addScaledVector(to.normalize(), stepLen);
         w.group.rotation.y = Math.atan2(to.x, to.z);
-        pos.y = Math.abs(Math.sin(performance.now() / 110)) * 0.04;
+        w.moving = true;
       }
     }
     this.walkers = this.walkers.filter((w) => !w.done);
-    if (this.you) this.you.position.y = Math.abs(Math.sin(performance.now() / 900)) * 0.02;
+    const now = performance.now() / 1000;
+    for (const w of this.walkers) this.animateLimbs(w.group, w.moving, now);
+    if (this.you) this.animateLimbs(this.you, false, now);
     for (const f of this.floaters) {
       f.life -= dt;
       f.sprite.position.y += dt * 0.6;
@@ -792,6 +852,6 @@ export class ShopScene {
     }
     this.floaters = this.floaters.filter((f) => f.life > 0);
     this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    this.post.render();
   }
 }

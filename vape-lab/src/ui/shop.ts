@@ -1,7 +1,7 @@
 import {
   addListing, beginDay, buyUpgrade, canMakeOwn, canUpgrade, UPGRADES, upgradeStatus, defaultChoice, endDay, faultChance, intelEstimate, KNOCKOFF_AT, maxOrder, MAX_STOCK,
   nextTier, orderStock, removeListing, resolve, reviseListing, setAutoRestock, setPrice, setVigilance, shelfSlots, step,
-  COMMISSION_GREAT, runTest, tierOf, unitCost, upgradeShop, VIGILANCE,
+  COMMISSION_GREAT, QUEUE_LIMIT, runTest, tierOf, unitCost, upgradeShop, VIGILANCE,
   type DayEventKind, type DaySession, type Product, type ShopState, type Visit,
 } from '../sim';
 import { notifyShop, onShop, resetShop, saveShop, shopAction, shopState } from '../shopState';
@@ -80,6 +80,7 @@ export async function openShop(): Promise<void> {
   shopState.live = session.shop;
   shopState.liveVisits = [];
   shopState.liveRevenue = 0;
+  shopState.liveQueue = 0;
   shopState.outcome = null;
   sceneRef?.clearPeople();
   sceneRef?.setShop(session.shop);
@@ -129,6 +130,7 @@ export async function openShop(): Promise<void> {
 
     shopState.live = session.shop;
     shopState.liveRevenue = session.revenue - session.refunds - session.fines;
+    shopState.liveQueue = session.queue;
     notifyShop('live');
     if (!fastForward) await sleep(r.encounter ? 1100 : gap);
   }
@@ -401,6 +403,8 @@ function visitLine(s: ShopState, v: Visit): string {
   if (v.walkout === 'banned') return 'turned away at the door';
   if (v.walkout === 'underage') return 'no ID, refused';
   if (v.walkout === 'stockout') return 'left: favourite sold out';
+  if (v.walkout === 'queue') return 'gave up queueing';
+  if (v.walkout === 'offended') return 'offended at being carded, left';
   if (v.walkout === 'nothing') return 'browsed, bought nothing';
   return `bought ${v.qty} × ${productName(s, v.productId)}`;
 }
@@ -411,7 +415,7 @@ function visitRow(s: ShopState, v: Visit): HTMLElement {
   return h('div.visit', { class: bad ? 'caught' : v.qty ? 'bought' : 'left' },
     h('span.avatar', {}, v.kind === 'thief' ? '🫳' : c?.avatar ?? '?'),
     h('div', {},
-      h('b', {}, v.kind === 'thief' ? 'Shoplifter' : v.regularId ? v.name : c?.name ?? v.name), v.regularId ? h('span.reg-badge', {}, 'regular') : null,
+      h('b', {}, v.kind === 'thief' ? 'Shoplifter' : v.name), v.regularId ? h('span.reg-badge', {}, 'regular') : h('span.fine', {}, ` · ${c?.name ?? ''}`),
       h('div.fine', {}, visitLine(s, v)),
       v.tell && !v.caught ? h('div.tell', {}, `Seen: ${v.tell}`) : null,
     ),
@@ -432,7 +436,7 @@ export function mountCounter(root: HTMLElement): void {
       h('div.enc-title', {}, e.title),
       h('div.enc-who', {},
         h('span.avatar.big', {}, e.kind === 'shoplift' ? '🫳' : c?.avatar ?? '?'),
-        h('div', {}, h('b', {}, e.kind === 'shoplift' ? 'Three customers by the shelves' : e.who), e.kind === 'shoplift' ? null : h('div.fine', {}, e.look)),
+        h('div', {}, h('b', {}, e.kind === 'shoplift' ? 'Three customers by the shelves' : e.who), e.kind === 'shoplift' ? null : h('div.fine', {}, `${c?.name ?? ''} · ${e.look}`)),
       ),
       h('div.bubble', {}, `“${e.line}”`),
       e.detail ? h('div.enc-detail', {}, e.detail) : null,
@@ -442,6 +446,7 @@ export function mountCounter(root: HTMLElement): void {
         return h('button.enc-opt', { class: o.id === 'serve' || o.id === 'refuse' ? 'risky' : '', style: l ? `--c:${l.product.brand.labelColour}` : '', onclick: () => choose(o.id) },
           l ? h('span.swatch') : null,
           h('span.opt-main', {}, h('b', {}, o.label), o.hint ? h('span.fine', {}, o.hint) : null),
+          o.time !== undefined ? h('span.opt-time', { class: o.time >= 2 ? 'slow' : '', title: 'Time at the counter; the queue grows meanwhile' }, o.time < 0.5 ? 'quick' : `${o.time.toFixed(o.time % 1 ? 1 : 0)} min`) : null,
         );
       })),
     );
@@ -451,10 +456,16 @@ export function mountCounter(root: HTMLElement): void {
     clear(body);
     const s = view();
     if (shopState.playing) {
+      const q = shopState.liveQueue;
+      const qState = q > QUEUE_LIMIT + 1.5 ? 'bad' : q > QUEUE_LIMIT ? 'warn' : 'ok';
       body.append(h('div.live-head', {},
         h('b', {}, `Day ${s.day} · open`),
         h('span', {}, `Till: ${cr(shopState.liveRevenue)}`),
         h('button.small.ghost', { onclick: () => void openShop() }, 'Skip to closing'),
+      ), h('div.queue', { class: qState },
+        h('span', {}, 'Queue'),
+        h('div.queue-bar', {}, h('div', { style: `width:${Math.min(100, (q / (QUEUE_LIMIT + 3)) * 100)}%` })),
+        h('span.fine', {}, qState === 'ok' ? 'moving' : qState === 'warn' ? 'getting long' : 'people are leaving'),
       ));
       if (shopState.encounter) {
         const card = renderEncounter();

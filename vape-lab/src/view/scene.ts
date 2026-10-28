@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { GameData, Product } from '../sim/types';
 import { drawLabel } from './label';
+import { Post } from './post';
 
 interface Puff {
   pos: THREE.Vector3;
@@ -90,6 +91,7 @@ export class LabScene {
   private sparklePoints: THREE.Points;
   private ring: THREE.Mesh;
   private ringT = -1;
+  private post: Post;
 
   constructor(private container: HTMLElement, private data: GameData) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -138,6 +140,7 @@ export class LabScene {
     this.ring.position.y = 0.02;
     this.scene.add(this.ring);
 
+    this.post = new Post(this.renderer, this.scene, this.camera, { bloom: 0.3, envIntensity: 0.35, threshold: 0.92 });
     this.bindPointer();
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
@@ -401,6 +404,7 @@ export class LabScene {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h, false);
+    this.post?.setSize(w, h);
     this.camera.aspect = w / h;
     // Widen the view on tall/narrow stages so the whole shelf stays in frame.
     this.camera.fov = Math.min(56, 40 * Math.max(1, 1.25 / this.camera.aspect) ** 0.5);
@@ -443,7 +447,7 @@ export class LabScene {
     }
 
     this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    this.post.render();
   }
 
   private updatePuffs(dt: number): void {

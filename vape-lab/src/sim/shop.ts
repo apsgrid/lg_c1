@@ -211,7 +211,7 @@ export function canMakeOwn(shop: ShopState): boolean {
 
 // --- Shop upgrades ----------------------------------------------------------------------
 
-export type PerkKey = 'footfall' | 'slots' | 'buyChance' | 'loyaltyGain' | 'advice' | 'adviceGrace' | 'cctv' | 'repRest';
+export type PerkKey = 'footfall' | 'slots' | 'buyChance' | 'loyaltyGain' | 'advice' | 'adviceGrace' | 'cctv' | 'repRest' | 'idScanner' | 'drain';
 
 export interface UpgradeDef {
   id: string;
@@ -225,10 +225,12 @@ export interface UpgradeDef {
 /** The whole upgrade content layer: add an entry here and it appears in the shop. */
 export const UPGRADES: UpgradeDef[] = [
   { id: 'sign', name: 'Hand-painted sign', blurb: '+10% customers', cost: 150, minTier: 1, perks: { footfall: 0.1 } },
+  { id: 'id_scanner', name: 'ID scanner', blurb: 'ID checks take seconds, and nobody takes offence', cost: 250, minTier: 1, perks: { idScanner: 1 } },
   { id: 'card_reader', name: 'Card reader', blurb: 'Fewer people leave empty-handed', cost: 200, minTier: 1, perks: { buyChance: 0.06 } },
   { id: 'sofa', name: 'Comfy sofa', blurb: 'Regulars linger; loyalty grows 30% faster', cost: 600, minTier: 2, perks: { loyaltyGain: 0.3 } },
   { id: 'tasting_bar', name: 'Tasting bar', blurb: 'More people ask for advice, and forgive near-misses', cost: 900, minTier: 2, perks: { advice: 0.12, adviceGrace: 5 } },
-  { id: 'cctv', name: 'CCTV', blurb: 'Points out shoplifters, like a guard but no wages', cost: 800, minTier: 2, perks: { cctv: 1 } },
+  { id: 'cctv', name: 'CCTV', blurb: 'Narrows a shoplifter down to two suspects; no wages', cost: 800, minTier: 2, perks: { cctv: 1 } },
+  { id: 'second_till', name: 'Second till', blurb: 'The queue moves much faster on busy days', cost: 1200, minTier: 3, perks: { drain: 0.7 } },
   { id: 'neon', name: 'Neon window display', blurb: '+20% customers', cost: 1500, minTier: 3, perks: { footfall: 0.2 } },
   { id: 'extra_shelf', name: 'Extra shelving', blurb: '+2 product slots', cost: 2000, minTier: 3, perks: { slots: 2 } },
   { id: 'lounge', name: 'Lounge corner', blurb: 'Reputation settles at 60 instead of 50', cost: 4000, minTier: 4, perks: { repRest: 10 } },
@@ -339,7 +341,8 @@ export function sameFormula(a: Product, b: Product): boolean {
 
 // --- Flavour text -----------------------------------------------------------------------
 
-const FIRST = ['Ash', 'Bex', 'Cal', 'Dee', 'Eli', 'Fran', 'Gus', 'Hana', 'Ivo', 'Jo', 'Kit', 'Lou', 'Mo', 'Nia', 'Oz', 'Pip', 'Quin', 'Rae', 'Sid', 'Tam', 'Uma', 'Vic', 'Wren', 'Zed'];
+const FIRST = ['Ash', 'Bex', 'Cal', 'Dee', 'Eli', 'Fran', 'Gus', 'Hana', 'Ivo', 'Jo', 'Kit', 'Lou', 'Mo', 'Nia', 'Oz', 'Pip', 'Quin', 'Rae', 'Sid', 'Tam', 'Uma', 'Vic', 'Wren', 'Zed',
+  'Ade', 'Bea', 'Cass', 'Dev', 'Esme', 'Finn', 'Gem', 'Hal', 'Isla', 'Jas', 'Kai', 'Lena', 'Max', 'Nell', 'Omar', 'Priya', 'Ravi', 'Suki', 'Theo', 'Vera', 'Yas', 'Zara'];
 const NICK = ['the Cloud', 'from Upstairs', 'Two-Bags', 'in the Hoodie', 'with the Dog', 'Big Puff', 'the Critic', 'Night Shift', 'from the Garage', 'Quiet', 'the Postie', 'in the Van'];
 const LOOKS = [
   'grey hoodie, earbuds in', 'red raincoat, dripping umbrella', 'paint-spattered work boots', 'tracksuit and a bum bag',
@@ -403,7 +406,7 @@ export interface Visit {
   productId?: string;
   qty: number;
   spent: number;
-  walkout?: 'stockout' | 'nothing' | 'banned' | 'refused' | 'underage';
+  walkout?: 'stockout' | 'nothing' | 'banned' | 'refused' | 'underage' | 'queue' | 'offended';
   tell?: string;
   caught?: boolean;
   young?: boolean;
@@ -415,6 +418,8 @@ export interface EncounterOption {
   id: string;
   label: string;
   hint?: string;
+  /** Minutes at the counter this choice takes; the queue grows while you're busy. */
+  time?: number;
 }
 
 export interface Encounter {
@@ -457,6 +462,8 @@ export interface DaySession {
   fines: number;
   repStart: number;
   restockSpend: number;
+  /** Minutes the queue is backed up. Careful choices take time; a long queue makes people leave. */
+  queue: number;
 }
 
 export interface DayReport {
@@ -588,7 +595,7 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
   const walkIns = Math.max(2, Math.round((4 + shop.reputation / 8 + rngRange(rng, 0, 4)) * tier.footfall * (1 + perk(shop, 'footfall'))));
   for (let i = 0; i < walkIns; i++) {
     const archetype = pickArchetype(rng, data, tier);
-    const v: Omit<Visitor, 'idx'> = { ...base(), kind: 'walkin', name: data.customers.find((c) => c.id === archetype)?.name ?? archetype, archetype };
+    const v: Omit<Visitor, 'idx'> = { ...base(), kind: 'walkin', name: rngPick(rng, FIRST), archetype };
     if (rng() < tier.youngShare) {
       v.looksYoung = true;
       const minor = rng() < 0.45;
@@ -598,7 +605,8 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
         : rngPick(rng, YOUNG_LOOKS.adultUnsure);
     }
     v.wantsAdvice = rng() < 0.22 + perk(shop, 'advice');
-    v.probes = archetype === 'novelty_seeker' && tier.rivals && rng() < 0.3;
+    // Curious fans ask about recipes too, so a nosy question isn't proof of a rival.
+    v.probes = tier.rivals && rng() < (archetype === 'novelty_seeker' ? 0.45 : archetype === 'anti_sweet' ? 0.2 : 0.04);
     visitors.push(v);
   }
 
@@ -609,7 +617,7 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
       const archetype = pickArchetype(rng, data, tier);
       visitors.push({
         ...base(), kind: 'rival', rivalId: rival.id, archetype,
-        name: data.customers.find((c) => c.id === archetype)?.name ?? archetype,
+        name: rngPick(rng, FIRST),
         probes: rng() < 0.55,
       });
     }
@@ -634,7 +642,7 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
   return {
     shop, day, events,
     visitors: visitors.map((v, idx) => ({ ...v, idx })),
-    pos: 0, visits: [], sales: {}, revenue: 0, refunds: 0, fines: 0,
+    pos: 0, visits: [], sales: {}, revenue: 0, refunds: 0, fines: 0, queue: 0,
     repStart: shop.reputation,
     restockSpend: shop.spentSinceOpen,
   };
@@ -765,6 +773,28 @@ function completePurchase(s: DaySession, v: Visitor, l: Listing, score: number, 
   return { name: v.name, archetype: v.archetype, regularId: v.regularId, productId: l.product.id, qty, spent, kind: v.kind, young: v.looksYoung, ...extra };
 }
 
+// --- Time at the counter ---------------------------------------------------------------------
+
+/** Queue minutes each choice costs. Careful answers are slow answers. */
+export function timeCost(choice: string, shop: ShopState): number {
+  if (choice === 'check') return perk(shop, 'idScanner') ? 0.4 : 2;
+  if (choice.startsWith('rec:')) return 1.5;
+  if (choice.startsWith('stop:')) return 3;
+  const t: Record<string, number> = {
+    serve: 0.3, explain: 2.5, vague: 0.3, browse: 0.2, refund: 0.8, replace: 1.2, refuse: 2,
+    ignore: 0, accept: 1.5, decline: 0.3, handover: 1,
+  };
+  return t[choice] ?? 0.5;
+}
+
+/** How fast the queue clears between customers. */
+function queueDrain(shop: ShopState): number {
+  return 0.9 + (shop.vigilance === 1 ? 0.5 : 0) + perk(shop, 'drain');
+}
+
+/** Above this many minutes, people in the queue start giving up. */
+export const QUEUE_LIMIT = 2.5;
+
 // --- Serving ------------------------------------------------------------------------------
 
 export interface StepResult {
@@ -783,8 +813,25 @@ export function step(input: DaySession, data: GameData): StepResult {
   const regular = regularOf(s, v);
   const enc = (e: Omit<Encounter, 'visitorIdx' | 'who' | 'archetype' | 'look'>): StepResult => ({
     session: s, visit: null, done: false,
-    encounter: { ...e, visitorIdx: v.idx, who: v.name, archetype: v.archetype, look: v.youngLook ?? v.look },
+    encounter: {
+      ...e, visitorIdx: v.idx, who: v.name, archetype: v.archetype, look: v.youngLook ?? v.look,
+      options: e.options.map((o) => ({ ...o, time: timeCost(o.id, s.shop) })),
+    },
   });
+
+  // The queue clears a little between customers; if it's long, people give up.
+  s.queue = Math.max(0, s.queue - queueDrain(s.shop));
+  if (s.queue > QUEUE_LIMIT && (v.kind === 'walkin' || v.kind === 'regular' || v.kind === 'rival')) {
+    const chance = (s.queue - QUEUE_LIMIT) * 0.18 * (v.kind === 'regular' ? 0.5 : 1);
+    if (rng() < chance) {
+      s.pos++;
+      rep(s, -0.1);
+      if (regular) regular.loyalty = clamp(regular.loyalty - 2);
+      const visit: Visit = { name: v.name, archetype: v.archetype, regularId: v.regularId, rivalId: v.rivalId, qty: 0, spent: 0, walkout: 'queue', kind: v.kind, young: v.looksYoung };
+      s.visits.push(visit);
+      return { session: s, encounter: null, visit, done: false };
+    }
+  }
 
   if (v.kind === 'return' && v.returnOf) {
     const r = v.returnOf;
@@ -805,18 +852,22 @@ export function step(input: DaySession, data: GameData): StepResult {
     const suspects = [...v.decoys];
     const thiefTell = rngPick(rng, THIEF_TELLS);
     suspects.splice(v.thiefSlot ?? 0, 0, { name: v.name, look: v.look, tell: thiefTell });
-    const guard = s.shop.vigilance === 2 || perk(s.shop, 'cctv') > 0;
+    const guard = s.shop.vigilance === 2;
+    const cctv = !guard && perk(s.shop, 'cctv') > 0;
+    const thiefSlot = v.thiefSlot ?? 0;
+    // CCTV only narrows it down: the thief plus one innocent near the shelf.
+    const onCamera = new Set([thiefSlot, cctv ? (thiefSlot + 1 + Math.floor(rng() * 2)) % 3 : -1]);
     return enc({
       kind: 'shoplift', title: 'Shoplifter!',
       line: 'Something just went missing from the shelf. Which of these three took it?',
-      detail: guard ? (s.shop.vigilance === 2 ? 'Your guard is pointing at one of them.' : 'The CCTV caught one of them.') : 'Look for the odd one out.',
+      detail: guard ? 'Your guard is pointing at one of them.' : cctv ? 'The CCTV shows two of them near the shelf.' : 'Look for the odd one out. Chasing someone leaves the counter empty.',
       options: [
         ...suspects.map((x, i) => ({
           id: `stop:${i}`,
           label: `Stop ${x.name}`,
-          hint: `${x.look}${x.tell ? `; ${x.tell}` : ''}${guard && i === (v.thiefSlot ?? 0) ? (s.shop.vigilance === 2 ? ' (guard nods)' : ' (seen on CCTV)') : ''}`,
+          hint: `${x.look}${x.tell ? `; ${x.tell}` : ''}${guard && i === thiefSlot ? ' (guard nods)' : cctv && onCamera.has(i) ? ' (on CCTV)' : ''}`,
         })),
-        { id: 'ignore', label: 'Let it go', hint: 'Lose the stock, avoid a scene' },
+        { id: 'ignore', label: 'Let it go', hint: 'Lose 1-3 units, but the queue keeps moving' },
       ],
     });
   }
@@ -873,22 +924,23 @@ export function step(input: DaySession, data: GameData): StepResult {
       line: 'Can I get one of these, please?',
       detail: 'They look young. Rule of thumb: if they look under 25, ask.',
       options: [
-        { id: 'check', label: 'Ask for ID' },
-        { id: 'serve', label: 'Just serve them', hint: `Selling to a minor: ${ID_FINE} cr fine and a big reputation hit` },
+        { id: 'check', label: 'Ask for ID', hint: perk(s.shop, 'idScanner') ? 'Quick with the scanner' : 'Slow, and some adults take offence and leave' },
+        { id: 'serve', label: 'Just serve them', hint: `Fast. But selling to a minor: ${ID_FINE} cr fine and a big reputation hit` },
       ],
     });
   }
 
   if (v.probes && inStock(s).length) {
     const target = [...inStock(s)].sort((a, b) => b.soldTotal - a.soldTotal)[0];
-    const tell = v.kind === 'rival' ? rngPick(rng, RIVAL_TELLS) : rng() < 0.4 ? rngPick(rng, INNOCENT_TELLS) : undefined;
+    // Tells are a hint, not proof: rivals don't always slip up, and fans can look shifty.
+    const tell = v.kind === 'rival' ? (rng() < 0.65 ? rngPick(rng, RIVAL_TELLS) : undefined) : rng() < 0.35 ? rngPick(rng, INNOCENT_TELLS) : undefined;
     return enc({
       kind: 'probe', title: 'A nosy question',
       line: `What exactly goes into ${target.product.brand.name}? Like, what's in the mix?`,
       detail: tell ? `They ${tell}.` : 'They seem keen.',
       options: [
-        { id: 'explain', label: 'Talk them through the notes', hint: 'Genuine fans love it. Rivals learn a lot.' },
-        { id: 'vague', label: '"House secret, sorry"', hint: 'Safe, but genuine fans feel brushed off' },
+        { id: 'explain', label: 'Talk them through the notes', hint: 'Fans love it and may come back. Rivals learn a lot. Takes a while.' },
+        { id: 'vague', label: '"House secret, sorry"', hint: 'Quick and safe, but fans often walk off' },
       ],
     });
   }
@@ -938,6 +990,7 @@ export function resolve(input: DaySession, choice: string, data: GameData): { se
   const s = clone(input);
   const v = s.visitors[s.pos];
   s.pos++;
+  s.queue += timeCost(choice, s.shop);
   const rng = vrng(s, s.day, v.idx, `choice:${choice}`);
   const regular = regularOf(s, v);
   const finish = (visit: Visit, outcome: Outcome) => {
@@ -1069,7 +1122,10 @@ export function resolve(input: DaySession, choice: string, data: GameData): { se
       const spent = l ? sell(s, v, l, 1, data) : 0;
       return finish(none({ productId: l?.product.id, qty: l ? 1 : 0, spent, walkout: undefined, note: 'underage sale' }), { line: 'They were underage. That\'s a fine.', tone: 'bad', pop: `−${ID_FINE} cr` });
     }
-    // Adult: either served straight away or shows ID, then shops normally.
+    // Adult. Being carded can sting: some leave without buying (not with a quick scanner).
+    if (choice === 'check' && rng() < (perk(s.shop, 'idScanner') ? 0.04 : 0.18)) {
+      return finish(none({ walkout: 'offended' }), { line: `Seriously? I'm ${v.age}. Forget it.`, tone: 'bad', pop: 'Offended' });
+    }
     const res = autoShop(s, v, data, rng);
     if (res.listing) {
       const visit = completePurchase(s, v, res.listing, res.score, data, rng);
@@ -1087,9 +1143,11 @@ export function resolve(input: DaySession, choice: string, data: GameData): { se
     }
     const res = autoShop(s, v, data, rng);
     const happy = v.kind !== 'rival' && choice === 'explain';
-    if (happy) rep(s, 0.25);
-    if (res.listing && (choice === 'explain' || rng() < 0.6)) {
+    if (happy) rep(s, 0.35);
+    if (v.kind !== 'rival' && choice === 'vague') rep(s, -0.1);
+    if (res.listing && (choice === 'explain' || rng() < 0.5)) {
       const visit = completePurchase(s, v, res.listing, res.score + (happy ? 10 : 0), data, rng);
+      if (happy) maybeRecruit(s, v, res.listing, res.score + 15, rng, 0.25);
       return finish(visit, { line: happy ? 'That\'s fascinating. I\'ll take one!' : choice === 'vague' ? 'Fair enough. I\'ll take one anyway.' : 'Very interesting… thanks.', tone: happy ? 'good' : 'neutral', pop: `+${Math.round(visit.spent)} cr` });
     }
     return finish(none({ walkout: 'nothing' }), { line: choice === 'vague' ? 'Oh. Okay then.' : 'Thanks, I\'ll think about it.', tone: 'neutral', pop: '…' });
@@ -1166,6 +1224,11 @@ export function endDay(input: DaySession, data: GameData): { shop: ShopState; re
       s.events.push({ kind: 'regular_leave', text: `${r.name} has stopped coming in.` });
     }
   }
+
+  const queued = s.visits.filter((v) => v.walkout === 'queue').length;
+  if (queued) s.events.push({ kind: 'stockout', text: `${queued} ${queued === 1 ? 'person' : 'people'} gave up queueing while you were busy at the counter.` });
+  const offended = s.visits.filter((v) => v.walkout === 'offended').length;
+  if (offended) s.events.push({ kind: 'id_refused', text: `${offended} adult${offended === 1 ? '' : 's'} took offence at being asked for ID and left.` });
 
   const wages = tier.rivals || tier.shoplift > 0 ? VIGILANCE[shop.vigilance].wage : 0;
   shop.cash = round2(shop.cash + s.revenue - s.refunds - s.fines - wages - tier.rent);

@@ -315,3 +315,64 @@ describe('forecast', () => {
     expect(forecast(good, shop, data).unitsPerDay).toBeGreaterThan(forecast(bad, shop, data).unitsPerDay);
   });
 });
+
+describe('counter trade-offs', () => {
+  const careful = (e: Encounter) => {
+    if (e.kind === 'recommend') return e.options[0].id;
+    if (e.kind === 'shoplift') return 'stop:0';
+    return ({ id: 'check', probe: 'explain', return: 'replace', commission: 'accept', pickup: 'handover' } as Record<string, string>)[e.kind] ?? 'browse';
+  };
+  const fast = (e: Encounter) => ({ id: 'serve', probe: 'vague', return: 'refund', shoplift: 'ignore', commission: 'decline', pickup: 'handover' } as Record<string, string>)[e.kind] ?? 'browse';
+  const tally = (s0: ShopState, choose: (e: Encounter, s: DaySession) => string) => {
+    let s = s0, queue = 0, fines = 0, offended = 0;
+    for (let d = 0; d < 25; d++) {
+      const r = simulateDay(s, data, choose);
+      s = r.shop;
+      queue += r.report.visits.filter((v) => v.walkout === 'queue').length;
+      offended += r.report.visits.filter((v) => v.walkout === 'offended').length;
+      fines += r.report.fines;
+    }
+    return { queue, fines, offended };
+  };
+
+  it('careful answers back the queue up; fast answers risk fines', () => {
+    const base = stocked(4, 20000);
+    const c = tally(base, careful);
+    const f = tally(base, fast);
+    expect(c.queue).toBeGreaterThan(f.queue);
+    expect(f.fines).toBeGreaterThan(c.fines);
+    expect(c.offended).toBeGreaterThan(0);
+  });
+
+  it('an ID scanner and a second till ease the queue', async () => {
+    const { buyUpgrade } = await import('../src/sim');
+    const base = stocked(4, 20000);
+    const kitted = buyUpgrade(buyUpgrade(base, 'id_scanner'), 'second_till');
+    const a = tally(base, careful), b = tally(kitted, careful);
+    expect(b.queue).toBeLessThan(a.queue);
+    expect(b.offended).toBeLessThan(a.offended);
+  });
+
+  it('CCTV narrows a shoplifter to two suspects, a guard to one', async () => {
+    const { buyUpgrade } = await import('../src/sim');
+    const marks = (s0: ShopState, tag: string) => {
+      let seen: number | null = null;
+      run(s0, 40, (e) => {
+        if (e.kind === 'shoplift' && seen === null) seen = e.options.filter((o) => o.hint?.includes(tag)).length;
+        return e.kind === 'shoplift' ? 'ignore' : e.kind === 'id' ? 'check' : 'browse';
+      });
+      return seen;
+    };
+    expect(marks(buyUpgrade(stocked(4, 20000), 'cctv'), '(on CCTV)')).toBe(2);
+    expect(marks(setVigilance(stocked(4, 20000), 2), '(guard nods)')).toBe(1);
+  });
+
+  it('choices show their time cost', () => {
+    let checked = false;
+    run(stocked(2, 3000), 10, (e) => {
+      if (!checked) { checked = true; for (const o of e.options) expect(typeof o.time).toBe('number'); }
+      return e.kind === 'id' ? 'check' : 'browse';
+    });
+    expect(checked).toBe(true);
+  });
+});

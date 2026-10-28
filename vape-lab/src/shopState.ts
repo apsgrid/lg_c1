@@ -20,6 +20,8 @@ export const shopState = {
   live: null as ShopState | null,
   liveVisits: [] as Visit[],
   liveRevenue: 0,
+  /** Minutes the queue is backed up (see QUEUE_LIMIT). */
+  liveQueue: 0,
   encounter: null as Encounter | null,
   outcome: null as (Outcome & { who: string }) | null,
 };
