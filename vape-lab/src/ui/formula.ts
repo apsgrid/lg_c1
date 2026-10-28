@@ -25,7 +25,13 @@ export function mountFormula(root: HTMLElement, scene: LabScene): void {
   const profileEl = h('div.profile-nums');
   const synEl = h('div.active-syn');
 
+  const nameInput = h('input#product-name', {
+    type: 'text', maxLength: 24, placeholder: 'Name your product', value: state.product.brand.name,
+    oninput: (e: Event) => update((p) => { p.brand.name = (e.target as HTMLInputElement).value; }, 'brand'),
+  });
   root.append(
+    h('label.name-field', { for: 'product-name' }, h('h3', {}, 'Product name')),
+    nameInput,
     h('h3', {}, 'Base'),
     baseRow,
     h('h3', {}, 'Notes ', h('span.muted', {}, '(tap or drag bottles from the shelf, max 4)')),
@@ -137,6 +143,7 @@ export function mountFormula(root: HTMLElement, scene: LabScene): void {
 
   const render = () => {
     const p = state.product;
+    if (document.activeElement !== nameInput) nameInput.value = p.brand.name;
     // Base chips.
     clear(baseRow);
     for (const b of data.bases) {

@@ -1,15 +1,20 @@
 import { emit } from '../events';
 import { newProduct, productId } from '../sim';
-import { data, newLineage, replaceProduct, state, subscribe } from '../state';
+import { data, newLineage, replaceProduct, state, subscribe, update } from '../state';
 import { storage, type SavedFormula } from '../store/storage';
 import { clear, h } from './dom';
 import { toast } from './toast';
 
 export function mountLibrary(root: HTMLElement): void {
   const list = h('div.library');
+  const saveName = h('input#save-name', {
+    type: 'text', maxLength: 24, placeholder: 'Name this formula', value: state.product.brand.name,
+    'aria-label': 'Name to save as',
+    onkeydown: (e: Event) => { if ((e as KeyboardEvent).key === 'Enter') save(); },
+  });
   root.append(
+    h('div.save-row', {}, saveName, h('button.primary', { onclick: save }, 'Save')),
     h('div.row', {},
-      h('button.primary', { onclick: save }, '💾 Save current'),
       h('button.ghost', { onclick: () => { replaceProduct({ ...newProduct(Math.floor(Math.random() * 1e9)) }, { newLineage: true }); toast('New blank formula'); } }, '＋ New formula'),
     ),
     list,
@@ -33,6 +38,13 @@ export function mountLibrary(root: HTMLElement): void {
   );
 
   function save(): void {
+    const name = saveName.value.trim();
+    if (!name) {
+      saveName.focus();
+      toast('Give it a name first.');
+      return;
+    }
+    if (name !== state.product.brand.name) update((p) => { p.brand.name = name; }, 'brand');
     const all = storage.loadFormulas();
     const existing = all.find((f) => f.lineage === state.lineage);
     const entry: SavedFormula = {
@@ -48,6 +60,31 @@ export function mountLibrary(root: HTMLElement): void {
     render();
   }
 
+  function startRename(el: HTMLElement, f: SavedFormula): void {
+    const input = h('input.rename', { type: 'text', maxLength: 24, value: f.product.brand.name, 'aria-label': 'New name' });
+    let done = false;
+    const commit = () => {
+      if (done) return;
+      done = true;
+      const name = input.value.trim();
+      if (name && name !== f.product.brand.name) {
+        storage.saveFormulas(storage.loadFormulas().map((x) => (x.slotId === f.slotId
+          ? { ...x, product: { ...x.product, brand: { ...x.product.brand, name } } } : x)));
+        if (f.lineage === state.lineage) update((p) => { p.brand.name = name; }, 'brand');
+        toast(`Renamed to “${name}”`);
+      }
+      render();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') commit();
+      if (e.key === 'Escape') { done = true; render(); }
+    });
+    input.addEventListener('blur', commit);
+    el.replaceWith(input);
+    input.focus();
+    input.select();
+  }
+
   function render(): void {
     clear(list);
     const all = storage.loadFormulas();
@@ -61,7 +98,11 @@ export function mountLibrary(root: HTMLElement): void {
       list.append(h('div.lib-row', { class: f.lineage === state.lineage ? 'current' : '' },
         h('span.lib-swatch', { style: `background:${p.brand.labelColour}` }),
         h('div.lib-main', {},
-          h('b', {}, p.brand.name || 'Untitled'),
+          h('b.lib-name', {
+            title: 'Tap to rename', tabIndex: 0, role: 'button',
+            onclick: (e: Event) => startRename(e.currentTarget as HTMLElement, f),
+            onkeydown: (e: Event) => { if ((e as KeyboardEvent).key === 'Enter') startRename(e.currentTarget as HTMLElement, f); },
+          }, p.brand.name || 'Untitled', h('span.pencil', { 'aria-hidden': 'true' }, ' ✎')),
           h('div.fine', {}, `${data.bases.find((b) => b.id === p.base)?.name ?? p.base} · ${p.brand.tier} · ${p.brand.price} cr${f.lastAppeal !== undefined ? ` · appeal ${Math.round(f.lastAppeal)}` : ''}`),
           h('div.dots', {}, ...chips),
         ),
@@ -83,6 +124,9 @@ export function mountLibrary(root: HTMLElement): void {
       ));
     }
   }
-  subscribe((reason) => { if (reason === 'replace') render(); });
+  subscribe((reason) => {
+    if (document.activeElement !== saveName) saveName.value = state.product.brand.name;
+    if (reason === 'replace') render();
+  });
   render();
 }
