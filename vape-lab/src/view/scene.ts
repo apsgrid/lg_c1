@@ -141,7 +141,16 @@ export class LabScene {
     this.bindPointer();
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
-    this.renderer.setAnimationLoop(() => this.tick());
+    this.setActive(true);
+  }
+
+  private active = false;
+  /** Pause rendering while another view is on screen. */
+  setActive(on: boolean): void {
+    if (on === this.active) return;
+    this.active = on;
+    this.renderer.setAnimationLoop(on ? () => this.tick() : null);
+    if (on) this.resize();
   }
 
   private makePoints(count: number, map: THREE.Texture, size: number, blending: THREE.Blending): THREE.Points {

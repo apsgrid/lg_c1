@@ -9,6 +9,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm test           # sim determinism + architecture rules
 npm run build      # typecheck + production build into dist/
+npm run build:single  # one self-contained dist/vape-lab.html (used for the phone link)
 ```
 
 ## How to play
@@ -20,6 +21,19 @@ npm run build      # typecheck + production build into dist/
 5. **Journal**: hidden synergies are revealed when a test or a customer comment triggers their hint.
 6. **Library**: save, load, duplicate and delete formulas (stored in localStorage).
 7. **Modes**: *Manual*; *Assisted* (live warnings, clash highlights and synergy nudges); *Auto* (a strategy loop that maximises profit or originality, targets a segment, aims for premium, or improves the existing product).
+
+## The shop
+
+Switch from **Lab** to **Shop** in the top bar.
+
+- **Shelf** (left panel, or the Shelf tab on phones): name your shop and put up to 6 saved products on the shelf. Set each shelf price and order stock. Orders are paid now and arrive next morning, and you can set an auto-restock level for each product.
+- **Open day N**: the day plays out in 3D. Walk-ins are the six panel customer types and buy with the same scoring as the lab test. Regulars (star badge) come back on their own.
+- **Today**: takings, profit, reputation, events, sales and a visitor log. Odd behaviour ("took photos of the shelf") may be a rival's secret shopper, or may be nothing.
+- **Regulars**: loyalty rises when their favourite is in stock and they like it. If it sells out they drift away.
+- **Rivals**: Cloud Kings, Mist & Co. and Puff Palace send disguised secret shoppers who learn your formulas. Once a rival knows 70% of a formula, they launch a knock-off that drags sales and reputation. Security staff catch shoppers and estimate what rivals know. Revising a formula in the Lab and choosing "Use revised formula" on the shelf leaves rivals with only 40% of their knowledge.
+- **Ledger**: cash and daily profit over time.
+
+The day sim lives in `src/sim/shop.ts`. It is pure and seeded like the rest of `sim/`, so the same shop state always plays the same day.
 
 ## Layout
 
