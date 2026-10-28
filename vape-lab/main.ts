@@ -1,4 +1,5 @@
 import './src/styles.css';
+import { canMakeOwn } from './src/sim';
 import { notifyShop, onShop, shopState } from './src/shopState';
 import { data, state, subscribe } from './src/state';
 import { h } from './src/ui/dom';
@@ -127,6 +128,25 @@ shop.buttons.get('rivals')?.addEventListener('click', () => shop.buttons.get('ri
 renderShopTop();
 shopScene.setShop(shopState.shop);
 
+// --- Lab lock: you mix your own flavours once you've moved into the garage ------------
+const labLock = h('div.lab-lock.lab-el', {},
+  h('div.lock-card', {},
+    h('div.lock-icon', { 'aria-hidden': 'true' }, '🔒'),
+    h('h2', {}, 'The Lab opens in your garage'),
+    h('p', {}, 'Right now you\'re selling ready-made supplier stock from the boot of your car. Build your reputation and savings, move into a garage, and you can start mixing your own flavours here.'),
+    h('button.primary.big', { onclick: () => setView('shop') }, 'Back to the car'),
+  ),
+);
+app.append(labLock);
+const renderLabLock = () => {
+  const locked = !canMakeOwn(shopState.shop);
+  labLock.hidden = !locked;
+  app.classList.toggle('lab-locked', locked);
+  const b = viewSeg.querySelector<HTMLElement>('[data-view="lab"]');
+  if (b) b.textContent = locked ? 'Lab 🔒' : 'Lab';
+};
+onShop(renderLabLock);
+
 // --- View switching -------------------------------------------------------------------
 function setView(v: ViewId): void {
   app.dataset.view = v;
@@ -148,9 +168,11 @@ function setView(v: ViewId): void {
 for (const [id, label] of [['lab', 'Lab'], ['shop', 'Shop']] as const) {
   viewSeg.append(h('button', { role: 'radio', 'data-view': id, onclick: () => setView(id) }, label));
 }
-let startView: ViewId = 'lab';
-try { startView = (localStorage.getItem('vapelab.v1.view') as ViewId) || 'lab'; } catch { /* ignore */ }
+// New players start at the car boot; returning players land where they left off.
+let startView: ViewId = canMakeOwn(shopState.shop) ? 'lab' : 'shop';
+try { startView = (localStorage.getItem('vapelab.v1.view') as ViewId) || startView; } catch { /* ignore */ }
 setView(startView === 'shop' ? 'shop' : 'lab');
+renderLabLock();
 phone.addEventListener('change', () => setView(app.dataset.view as ViewId));
 
 window.addEventListener('keydown', (e) => {

@@ -1,5 +1,5 @@
 import {
-  addListing, beginDay, canUpgrade, defaultChoice, endDay, faultChance, intelEstimate, KNOCKOFF_AT, maxOrder, MAX_STOCK,
+  addListing, beginDay, buyUpgrade, canMakeOwn, canUpgrade, UPGRADES, upgradeStatus, defaultChoice, endDay, faultChance, intelEstimate, KNOCKOFF_AT, maxOrder, MAX_STOCK,
   nextTier, orderStock, removeListing, resolve, reviseListing, setAutoRestock, setPrice, setVigilance, shelfSlots, step,
   tierOf, unitCost, upgradeShop, VIGILANCE,
   type DayEventKind, type DaySession, type Product, type ShopState, type Visit,
@@ -153,6 +153,8 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
     onchange: (e: Event) => shopAction((s) => ({ ...s, name: (e.target as HTMLInputElement).value.trim() || 'My Vape Store' })),
   });
   const tierCard = h('div.tier-card');
+  const upgradesHead = h('h3', {}, 'Shop upgrades');
+  const upgradesEl = h('div.upgrades');
   const status = h('div.shop-status');
   const vigilHead = h('h3', {}, 'Security ', h('span.muted', {}, '(spots shoplifters and secret shoppers)'));
   const vigil = h('div.chips', { role: 'radiogroup', 'aria-label': 'Security' });
@@ -167,12 +169,14 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
     nameInput,
     status,
     tierCard,
+    upgradesHead,
+    upgradesEl,
     vigilHead,
     vigil,
     shelfHead,
     list,
     h('div.add-row', {}, addSel, addBtn),
-    h('p.fine', {}, 'Stock comes from your Library: save products in the Lab first. Orders are paid now and arrive tomorrow morning.'),
+    h('p.fine.stock-note'),
     openBtn,
     h('details.danger', {},
       h('summary', {}, 'Start over'),
@@ -192,7 +196,8 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
   function candidates(): Product[] {
     const seen = new Set<string>();
     const out: Product[] = [];
-    for (const p of [state.product, ...storage.loadFormulas().map((f) => f.product)]) {
+    const own = canMakeOwn(shopState.shop) ? [state.product, ...storage.loadFormulas().map((f) => f.product)] : [];
+    for (const p of [...own, ...(data.wholesale ?? [])]) {
       if (!p.notes.length || seen.has(p.id) || shopState.shop.listings.some((l) => l.product.id === p.id)) continue;
       seen.add(p.id);
       out.push(p);
@@ -230,7 +235,7 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
       h('div.tier-steps', { 'aria-hidden': 'true' }, ...['Car', 'Garage', 'Small', 'Medium', 'Large', 'Premium'].map((n, i) => h('span', { class: i < s.tier ? 'done' : i === s.tier ? 'now' : '' }, n))),
       h('b', {}, tier.name),
       h('div.fine', {}, tier.blurb),
-      h('div.fine', {}, `${tier.slots} product slots · rent ${tier.rent} cr/day · up to ${tier.maxRegulars} regulars`),
+      h('div.fine', {}, `${shelfSlots(s)} product slots · rent ${tier.rent} cr/day · up to ${tier.maxRegulars} regulars`),
     );
     if (next) {
       const upBtn = h('button.small', {
@@ -317,7 +322,30 @@ export function mountShelf(root: HTMLElement, scene: ShopScene): void {
     clear(addSel);
     const c = candidates();
     if (!c.length) addSel.append(h('option', { value: '' }, 'No new products. Save some in the Lab.'));
-    for (const p of c) addSel.append(h('option', { value: p.id }, `${p.brand.name || 'Untitled'}${p.brand.format === 'disposable' ? ' (disposable)' : ''}${p.id === state.product.id ? ' (in the Lab now)' : ''}`));
+    const ownC = c.filter((p) => !p.brand.wholesale);
+    const supC = c.filter((p) => p.brand.wholesale);
+    const opt = (p: Product) => h('option', { value: p.id }, `${p.brand.name || 'Untitled'}${p.brand.format === 'disposable' ? ' (disposable)' : ''}${p.id === state.product.id ? ' (in the Lab now)' : ''}`);
+    if (ownC.length) addSel.append(h('optgroup', { label: 'Your Lab formulas' }, ...ownC.map(opt)));
+    if (supC.length) addSel.append(h('optgroup', { label: 'From the supplier (ready-made, lower margin)' }, ...supC.map(opt)));
+    (root.querySelector('.stock-note') as HTMLElement).textContent = canMakeOwn(s)
+      ? 'Sell supplier stock, or your own Lab formulas (save them in the Library first). Orders are paid now and arrive tomorrow morning.'
+      : 'From the car you can only sell ready-made supplier stock. Move into the Garage to start mixing your own flavours in the Lab. Orders are paid now and arrive tomorrow morning.';
+
+    // Upgrades for this shop (and a peek at the next ones).
+    clear(upgradesEl);
+    const visible = UPGRADES.filter((u) => u.minTier <= s.tier + 1);
+    upgradesHead.hidden = !visible.length;
+    for (const u of visible) {
+      const st = upgradeStatus(s, u.id);
+      upgradesEl.append(h('div.upgrade', { class: st.owned ? 'owned' : st.ok ? 'ready' : 'locked' },
+        h('div', {}, h('b', {}, u.name), h('div.fine', {}, u.blurb)),
+        st.owned ? h('span.owned-badge', {}, 'Owned')
+          : h('button.small', {
+            class: st.ok ? 'primary' : '', disabled: !st.ok || busy,
+            onclick: () => { shopAction((x) => buyUpgrade(x, u.id)); scene.setShop(shopState.shop); toast(`${u.name} installed.`); },
+          }, st.ok ? `Buy ${u.cost} cr` : st.reason),
+      ));
+    }
     addBtn.disabled = busy || !c.length || s.listings.length >= shelfSlots(s);
     addSel.disabled = busy;
     openBtn.classList.toggle('pulse', !busy && s.listings.some((l) => l.stock + l.incoming > 0));

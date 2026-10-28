@@ -152,6 +152,8 @@ export interface ShopState {
   history: DaySummary[];
   spentSinceOpen: number;
   nextRegularId: number;
+  /** Shop upgrades bought so far (ids from UPGRADES). Kept when you move. */
+  upgrades: string[];
 }
 
 function clone<T>(v: T): T {
@@ -179,20 +181,75 @@ export function newShop(seed: number, name = 'My Vape Store'): ShopState {
     history: [],
     spentSinceOpen: 0,
     nextRegularId: 1,
+    upgrades: [],
   };
 }
 
 /** Upgrade older saves. A v1 shop was already a small store. */
 export function migrateShop(raw: unknown): ShopState {
   const s = raw as Partial<ShopState> & { version?: number };
-  if (s.version === 2) return s as ShopState;
-  return { ...(s as ShopState), version: 2, tier: 2, pendingReturns: [] };
+  if (s.version === 2) return { ...(s as ShopState), upgrades: s.upgrades ?? [] };
+  return { ...(s as ShopState), version: 2, tier: 2, pendingReturns: [], upgrades: [] };
 }
 
 // --- Player actions (pure) ------------------------------------------------------------
 
 export function shelfSlots(shop: ShopState): number {
-  return tierOf(shop).slots;
+  return tierOf(shop).slots + perk(shop, 'slots');
+}
+
+/** Your own Lab formulas can be sold once you've moved out of the car. */
+export function canMakeOwn(shop: ShopState): boolean {
+  return shop.tier >= 1;
+}
+
+// --- Shop upgrades ----------------------------------------------------------------------
+
+export type PerkKey = 'footfall' | 'slots' | 'buyChance' | 'loyaltyGain' | 'advice' | 'adviceGrace' | 'cctv' | 'repRest';
+
+export interface UpgradeDef {
+  id: string;
+  name: string;
+  blurb: string;
+  cost: number;
+  minTier: number;
+  perks: Partial<Record<PerkKey, number>>;
+}
+
+/** The whole upgrade content layer: add an entry here and it appears in the shop. */
+export const UPGRADES: UpgradeDef[] = [
+  { id: 'sign', name: 'Hand-painted sign', blurb: '+10% customers', cost: 150, minTier: 1, perks: { footfall: 0.1 } },
+  { id: 'card_reader', name: 'Card reader', blurb: 'Fewer people leave empty-handed', cost: 200, minTier: 1, perks: { buyChance: 0.06 } },
+  { id: 'sofa', name: 'Comfy sofa', blurb: 'Regulars linger; loyalty grows 30% faster', cost: 600, minTier: 2, perks: { loyaltyGain: 0.3 } },
+  { id: 'tasting_bar', name: 'Tasting bar', blurb: 'More people ask for advice, and forgive near-misses', cost: 900, minTier: 2, perks: { advice: 0.12, adviceGrace: 5 } },
+  { id: 'cctv', name: 'CCTV', blurb: 'Points out shoplifters, like a guard but no wages', cost: 800, minTier: 2, perks: { cctv: 1 } },
+  { id: 'neon', name: 'Neon window display', blurb: '+20% customers', cost: 1500, minTier: 3, perks: { footfall: 0.2 } },
+  { id: 'extra_shelf', name: 'Extra shelving', blurb: '+2 product slots', cost: 2000, minTier: 3, perks: { slots: 2 } },
+  { id: 'lounge', name: 'Lounge corner', blurb: 'Reputation settles at 60 instead of 50', cost: 4000, minTier: 4, perks: { repRest: 10 } },
+];
+
+export function perk(shop: ShopState, key: PerkKey): number {
+  let total = 0;
+  for (const id of shop.upgrades ?? []) total += UPGRADES.find((u) => u.id === id)?.perks[key] ?? 0;
+  return total;
+}
+
+export function upgradeStatus(shop: ShopState, id: string): { owned: boolean; ok: boolean; reason: string } {
+  const u = UPGRADES.find((x) => x.id === id);
+  if (!u) return { owned: false, ok: false, reason: 'Unknown upgrade.' };
+  if ((shop.upgrades ?? []).includes(id)) return { owned: true, ok: false, reason: 'Owned' };
+  if (shop.tier < u.minTier) return { owned: false, ok: false, reason: `From the ${SHOP_TIERS[u.minTier].name}` };
+  if (shop.cash < u.cost) return { owned: false, ok: false, reason: `Needs ${u.cost} cr` };
+  return { owned: false, ok: true, reason: `${u.cost} cr` };
+}
+
+export function buyUpgrade(shop: ShopState, id: string): ShopState {
+  const u = UPGRADES.find((x) => x.id === id);
+  if (!u || !upgradeStatus(shop, id).ok) return shop;
+  const s = clone(shop);
+  s.cash = round2(s.cash - u.cost);
+  s.upgrades = [...(s.upgrades ?? []), id];
+  return s;
 }
 
 export function addListing(shop: ShopState, product: Product, data: GameData): ShopState {
@@ -487,7 +544,7 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
   }
 
   // Walk-ins, some of whom look young.
-  const walkIns = Math.max(2, Math.round((4 + shop.reputation / 8 + rngRange(rng, 0, 4)) * tier.footfall));
+  const walkIns = Math.max(2, Math.round((4 + shop.reputation / 8 + rngRange(rng, 0, 4)) * tier.footfall * (1 + perk(shop, 'footfall'))));
   for (let i = 0; i < walkIns; i++) {
     const archetype = pickArchetype(rng, data, tier);
     const v: Omit<Visitor, 'idx'> = { ...base(), kind: 'walkin', name: data.customers.find((c) => c.id === archetype)?.name ?? archetype, archetype };
@@ -499,7 +556,7 @@ export function beginDay(input: ShopState, data: GameData): DaySession {
         ? rngPick(rng, rng() < 0.4 ? YOUNG_LOOKS.minorObvious : YOUNG_LOOKS.minorUnsure)
         : rngPick(rng, YOUNG_LOOKS.adultUnsure);
     }
-    v.wantsAdvice = rng() < 0.22;
+    v.wantsAdvice = rng() < 0.22 + perk(shop, 'advice');
     v.probes = archetype === 'novelty_seeker' && tier.rivals && rng() < 0.3;
     visitors.push(v);
   }
@@ -643,7 +700,7 @@ function autoShop(s: DaySession, v: Visitor, data: GameData, rng: Rng): { listin
   if (!options.length) return { score: 0, walkout: 'stockout' };
   options.sort((a, b) => b.sc - a.sc);
   const best = options[0];
-  const p = clamp((best.sc - 35) / 45, 0.04, 0.95);
+  const p = clamp((best.sc - 35) / 45 + perk(s.shop, 'buyChance'), 0.04, 0.95);
   return rng() < p ? { listing: best.l, score: best.sc } : { score: best.sc, walkout: 'nothing' };
 }
 
@@ -655,7 +712,8 @@ function completePurchase(s: DaySession, v: Visitor, l: Listing, score: number, 
   if (regular) {
     regular.visits++;
     regular.lastVisitDay = s.day;
-    regular.loyalty = clamp(regular.loyalty + (score - 55) * 0.3);
+    const gain = (score - 55) * 0.3;
+    regular.loyalty = clamp(regular.loyalty + (gain > 0 ? gain * (1 + perk(s.shop, 'loyaltyGain')) : gain));
     if (!regular.favourite || score > 70) regular.favourite = l.product.id;
   }
   if (score > 65) rep(s, 0.12);
@@ -703,16 +761,16 @@ export function step(input: DaySession, data: GameData): StepResult {
     const suspects = [...v.decoys];
     const thiefTell = rngPick(rng, THIEF_TELLS);
     suspects.splice(v.thiefSlot ?? 0, 0, { name: v.name, look: v.look, tell: thiefTell });
-    const guard = s.shop.vigilance === 2;
+    const guard = s.shop.vigilance === 2 || perk(s.shop, 'cctv') > 0;
     return enc({
       kind: 'shoplift', title: 'Shoplifter!',
       line: 'Something just went missing from the shelf. Which of these three took it?',
-      detail: guard ? 'Your guard is pointing at one of them.' : 'Look for the odd one out.',
+      detail: guard ? (s.shop.vigilance === 2 ? 'Your guard is pointing at one of them.' : 'The CCTV caught one of them.') : 'Look for the odd one out.',
       options: [
         ...suspects.map((x, i) => ({
           id: `stop:${i}`,
           label: `Stop ${x.name}`,
-          hint: `${x.look}${x.tell ? `; ${x.tell}` : ''}${guard && i === (v.thiefSlot ?? 0) ? ' (guard nods)' : ''}`,
+          hint: `${x.look}${x.tell ? `; ${x.tell}` : ''}${guard && i === (v.thiefSlot ?? 0) ? (s.shop.vigilance === 2 ? ' (guard nods)' : ' (seen on CCTV)') : ''}`,
         })),
         { id: 'ignore', label: 'Let it go', hint: 'Lose the stock, avoid a scene' },
       ],
@@ -915,8 +973,9 @@ export function resolve(input: DaySession, choice: string, data: GameData): { se
     const l = s.shop.listings.find((x) => x.product.id === choice.slice(4) && x.stock > 0);
     if (l) {
       const score = rate(s, l, v.archetype, data, regular);
-      if (score >= 45) {
-        const great = score >= 60;
+      const grace = perk(s.shop, 'adviceGrace');
+      if (score >= 45 - grace) {
+        const great = score >= 60 - grace;
         const visit = completePurchase(s, v, l, score + (great ? 6 : 0), data, rng);
         if (great) {
           rep(s, 0.4);
@@ -971,7 +1030,8 @@ export function endDay(input: DaySession, data: GameData): { shop: ShopState; re
   shop.cash = round2(shop.cash + s.revenue - s.refunds - s.fines - wages - tier.rent);
   shop.spentSinceOpen = 0;
   // Word of mouth fades: reputation drifts back toward 50 unless you keep earning it.
-  shop.reputation = round1(clamp(shop.reputation + (50 - shop.reputation) * 0.05));
+  const rest = 50 + perk(shop, 'repRest');
+  shop.reputation = round1(clamp(shop.reputation + (rest - shop.reputation) * 0.05));
   shop.day = s.day + 1;
 
   let next: ShopState = shop;

@@ -1,0 +1,17 @@
+[
+  { "base": "fruity", "notes": [{ "noteId": "strawberry", "amount": 35 }, { "noteId": "watermelon", "amount": 20 }],
+    "tuning": { "intensity": 55, "cooling": 45, "smoothness": 50, "vapour": 50, "dependence": 20 },
+    "brand": { "name": "Strawberry Ice", "format": "disposable", "wholesale": true, "labelColour": "#e8435a", "style": "minimal", "logo": "drop", "tier": "budget", "price": 9 }, "seed": 11 },
+  { "base": "menthol_ice", "notes": [{ "noteId": "mint", "amount": 40 }],
+    "tuning": { "intensity": 50, "cooling": 60, "smoothness": 45, "vapour": 55, "dependence": 20 },
+    "brand": { "name": "Cool Mint", "format": "disposable", "wholesale": true, "labelColour": "#5fe0b0", "style": "minimal", "logo": "leaf", "tier": "budget", "price": 9 }, "seed": 12 },
+  { "base": "candy", "notes": [{ "noteId": "blue_raspberry", "amount": 40 }],
+    "tuning": { "intensity": 60, "cooling": 30, "smoothness": 45, "vapour": 50, "dependence": 20 },
+    "brand": { "name": "Blue Razz", "format": "disposable", "wholesale": true, "labelColour": "#2f7bff", "style": "minimal", "logo": "bolt", "tier": "budget", "price": 9 }, "seed": 13 },
+  { "base": "tobacco_style", "notes": [{ "noteId": "caramel", "amount": 25 }],
+    "tuning": { "intensity": 45, "cooling": 20, "smoothness": 60, "vapour": 45, "dependence": 20 },
+    "brand": { "name": "Golden Classic", "format": "refillable", "wholesale": true, "labelColour": "#d8b56a", "style": "classic", "logo": "crown", "tier": "standard", "price": 12 }, "seed": 14 },
+  { "base": "beverage", "notes": [{ "noteId": "cola", "amount": 30 }, { "noteId": "lemonade", "amount": 15 }],
+    "tuning": { "intensity": 50, "cooling": 35, "smoothness": 50, "vapour": 50, "dependence": 20 },
+    "brand": { "name": "Cola Fizz", "format": "disposable", "wholesale": true, "labelColour": "#5a2c16", "style": "retro", "logo": "circle", "tier": "budget", "price": 9 }, "seed": 15 }
+]

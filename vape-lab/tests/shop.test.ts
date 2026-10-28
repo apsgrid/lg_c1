@@ -213,3 +213,31 @@ describe('step', () => {
     expect(sess.pos).toBe(sess.visitors.length);
   });
 });
+
+describe('upgrades and supplier stock', () => {
+  it('upgrades need the right tier and cash, and apply their perks', async () => {
+    const { buyUpgrade, upgradeStatus, shelfSlots, perk } = await import('../src/sim');
+    const car = { ...newShop(1), cash: 5000 };
+    expect(upgradeStatus(car, 'sign').ok).toBe(false);
+    const garage = { ...car, tier: 1 };
+    const signed = buyUpgrade(garage, 'sign');
+    expect(signed.upgrades).toContain('sign');
+    expect(signed.cash).toBe(4850);
+    expect(perk(signed, 'footfall')).toBeCloseTo(0.1);
+    expect(buyUpgrade(signed, 'sign')).toBe(signed);
+    const medium = buyUpgrade({ ...car, tier: 3 }, 'extra_shelf');
+    expect(shelfSlots(medium)).toBe(8);
+  });
+  it('more customers with a neon window', async () => {
+    const { buyUpgrade } = await import('../src/sim');
+    const base = stocked(3, 20000);
+    const visitors = (s: ShopState) => run(s, 8).history.reduce((t, d) => t + d.visitors, 0);
+    expect(visitors(buyUpgrade(buyUpgrade(base, 'neon'), 'sign'))).toBeGreaterThan(visitors(base));
+  });
+  it('supplier stock exists and costs more than making it yourself', () => {
+    expect(data.wholesale?.length).toBeGreaterThanOrEqual(4);
+    const w = data.wholesale![0];
+    const own = { ...w, brand: { ...w.brand, wholesale: false } };
+    expect(unitCost(w, data).total).toBeGreaterThan(unitCost(own, data).total);
+  });
+});

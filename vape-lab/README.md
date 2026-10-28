@@ -28,6 +28,10 @@ Switch from **Lab** to **Shop** in the top bar.
 
 **Progression.** You start selling from the boot of your car, then move up: Garage → Small store → Medium store → Large store → Premium boutique. Each move costs cash and needs a minimum reputation. Bigger shops have more product slots, more customers and room for more regulars, but higher rent. Rival stores only notice you from the Small store on, and shoplifters start at the Garage. Premium boutique customers favour premium-tier products.
 
+**Starting out.** New games start at the car boot, selling ready-made supplier stock (`data/wholesale.json`): it carries the supplier's 1.6× markup, so margins are thin. The Lab unlocks once you move into the Garage, and from then on you can sell your own formulas too.
+
+**Shop upgrades.** Each shop level unlocks upgrades you buy with cash and keep when you move: a hand-painted sign and card reader (Garage), a comfy sofa, tasting bar and CCTV (Small store), a neon window and extra shelving (Medium), and a lounge corner (Large). Each one changes the sim (more customers, more advice requests, faster loyalty, shoplifter spotting, extra slots, a higher reputation floor) and appears in the 3D shop. They are defined in one catalog, `UPGRADES` in `src/sim/shop.ts`.
+
 **Serving.** Press **Open up** and customers come in one at a time. Most browse and buy on their own; some stop at the counter:
 - **Advice:** "Got anything really icy?" Pick a product. A good match earns reputation and loyalty and may win a regular; a poor one loses the sale.
 - **ID checks:** a customer looks young. Ask for ID, or serve them. Selling to a minor costs a fine and a big reputation hit.

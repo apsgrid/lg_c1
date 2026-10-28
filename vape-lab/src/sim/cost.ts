@@ -22,7 +22,8 @@ export function unitCost(product: Product, data: GameData): CostBreakdown {
   const mul = TIER_MULTIPLIER[product.brand.tier];
   const packaging = PACK_COST[product.brand.style] * (product.brand.tier === 'premium' ? 1.3 : 1);
   // Disposables are built cheap: half the build cost, flimsier packaging.
-  const f = product.brand.format === 'disposable' ? 0.5 : 1;
+  // Supplier stock carries the supplier's markup.
+  const f = (product.brand.format === 'disposable' ? 0.5 : 1) * (product.brand.wholesale ? 1.6 : 1);
   const total = ((base + notes + tuning) * mul + packaging) * f;
   return {
     base: round2(base * mul * f),

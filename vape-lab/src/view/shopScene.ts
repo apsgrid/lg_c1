@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { tierOf, type GameData, type ShopState, type ShopTierId } from '../sim';
+import { shelfSlots, tierOf, type GameData, type ShopState } from '../sim';
 import { drawLabel } from './label';
 
 const ARCHETYPE_COLOUR: Record<string, string> = {
@@ -24,6 +24,8 @@ interface Layout {
   browse: THREE.Vector3[];       // floor spots in front of each display
   camera: THREE.Vector3;
   target: THREE.Vector3;
+  /** Where each shop upgrade stands: position + facing. */
+  decor: Record<string, { at: THREE.Vector3; rot?: number }>;
 }
 
 interface Walker {
@@ -89,6 +91,7 @@ export class ShopScene {
   private clock = new THREE.Clock();
   private env = new THREE.Group();
   private displays = new THREE.Group();
+  private decor = new THREE.Group();
   private people = new THREE.Group();
   private signCanvas = document.createElement('canvas');
   private signTex: THREE.CanvasTexture;
@@ -97,7 +100,8 @@ export class ShopScene {
   private atCounter: Walker | null = null;
   private suspects: Walker[] = [];
   private active = false;
-  private tierId: ShopTierId | null = null;
+  private envKey = '';
+  private decorKey = '';
   private layout!: Layout;
   private you!: THREE.Group;
 
@@ -123,7 +127,7 @@ export class ShopScene {
     this.signTex = new THREE.CanvasTexture(this.signCanvas);
     this.signTex.colorSpace = THREE.SRGBColorSpace;
 
-    this.scene.add(this.env, this.displays, this.people);
+    this.scene.add(this.env, this.displays, this.decor, this.people);
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
   }
@@ -137,7 +141,7 @@ export class ShopScene {
 
   // --- Environments per tier ------------------------------------------------------------
 
-  private buildEnv(tier: ShopTierId, slots: number): void {
+  private buildEnv(tier: string, slots: number): void {
     this.clearPeople();
     this.scene.remove(this.env);
     disposeTree(this.env);
@@ -223,6 +227,7 @@ export class ShopScene {
       slots: [new THREE.Vector3(-0.4, 1.08, 1.5), new THREE.Vector3(0.4, 1.08, 1.5)],
       browse: [new THREE.Vector3(-0.4, 0, 2.6), new THREE.Vector3(0.6, 0, 2.6)],
       camera: new THREE.Vector3(2.5, 3.6, 8.5), target: new THREE.Vector3(0, 1, 1.4),
+      decor: {},
     };
   }
 
@@ -283,10 +288,14 @@ export class ShopScene {
       slots: [-1.1, 0, 1.1].map((x) => new THREE.Vector3(x, 0.89, -0.6)),
       browse: [-1.1, 0, 1.1].map((x) => new THREE.Vector3(x, 0, 0.4)),
       camera: new THREE.Vector3(1.6, 5.2, 9), target: new THREE.Vector3(0, 0.8, 0),
+      decor: {
+        sign: { at: new THREE.Vector3(0, 2.25, -2.97) },
+        card_reader: { at: new THREE.Vector3(2.35, 0.8, 0.9) },
+      },
     };
   }
 
-  private buildStore(g: THREE.Group, tier: ShopTierId, slots: number): void {
+  private buildStore(g: THREE.Group, tier: string, slots: number): void {
     const premium = tier === 'premium';
     const cols = Math.ceil(slots / 2);
     const width = Math.max(8, cols * 1.7 + 4);
@@ -374,7 +383,16 @@ export class ShopScene {
       outside: new THREE.Vector3(-width / 2 - 1.5, 0, doorZ), entrance: new THREE.Vector3(-width / 2 + 1, 0, doorZ),
       counter: new THREE.Vector3(counterX - 0.3, 0, 1.8), you: new THREE.Vector3(counterX + 0.2, 0, -0.1),
       slots: slotPos, browse,
-      camera: new THREE.Vector3(1.2, 5.2 + cols * 0.3, 8 + cols * 0.5), target: new THREE.Vector3(0, 1, 0),
+      camera: new THREE.Vector3(1.2, 4.5 + width * 0.25, 5 + width * 0.6), target: new THREE.Vector3(-0.3, 1, 0.3),
+      decor: {
+        sign: { at: new THREE.Vector3(-width / 2 + 0.08, 3.05, doorZ), rot: Math.PI / 2 },
+        card_reader: { at: new THREE.Vector3(counterX - 0.4, 1.0, 0.8) },
+        sofa: { at: new THREE.Vector3(-width / 2 + 0.7, 0, -1.0), rot: Math.PI / 2 },
+        tasting_bar: { at: new THREE.Vector3(width / 2 - 0.9, 0, -1.6) },
+        cctv: { at: new THREE.Vector3(width / 2 - 0.5, 3.4, -2.35) },
+        neon: { at: new THREE.Vector3(-width / 2 + 0.03, 1.9, -0.2), rot: Math.PI / 2 },
+        lounge: { at: new THREE.Vector3(-width / 2 + 2.2, 0, 3.0) },
+      },
     };
   }
 
@@ -394,12 +412,20 @@ export class ShopScene {
     this.signTex.needsUpdate = true;
   }
 
-  /** Rebuild the environment (on tier change) and the product displays. */
+  /** Rebuild the environment (on tier or slot change), upgrades and product displays. */
   setShop(shop: ShopState): void {
     const tier = tierOf(shop);
-    if (tier.id !== this.tierId) {
-      this.tierId = tier.id;
-      this.buildEnv(tier.id, tier.slots);
+    const slots = shelfSlots(shop);
+    const envKey = `${tier.id}:${slots}`;
+    if (envKey !== this.envKey) {
+      this.envKey = envKey;
+      this.decorKey = '';
+      this.buildEnv(tier.id, slots);
+    }
+    const decorKey = `${envKey}|${(shop.upgrades ?? []).join(',')}|${shop.name}`;
+    if (decorKey !== this.decorKey) {
+      this.decorKey = decorKey;
+      this.buildDecor(shop);
     }
     this.drawSign(shop.name || 'My Vape Store');
     this.scene.remove(this.displays);
@@ -444,6 +470,118 @@ export class ShopScene {
       }
       this.displays.add(g);
     });
+  }
+
+  // --- Upgrades ---------------------------------------------------------------------------
+
+  private buildDecor(shop: ShopState): void {
+    this.scene.remove(this.decor);
+    disposeTree(this.decor);
+    this.decor = new THREE.Group();
+    this.scene.add(this.decor);
+    for (const id of shop.upgrades ?? []) {
+      const spot = this.layout.decor[id];
+      if (!spot) continue;
+      const g = this.makeDecor(id, shop.name || 'My Vape Store');
+      g.position.copy(spot.at);
+      g.rotation.y = spot.rot ?? 0;
+      g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+      this.decor.add(g);
+    }
+  }
+
+  private makeDecor(id: string, name: string): THREE.Group {
+    const g = new THREE.Group();
+    const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(x, y, z);
+      g.add(mesh);
+      return mesh;
+    };
+    switch (id) {
+      case 'sign': {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 128;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#f4ead2';
+        ctx.fillRect(0, 0, 512, 128);
+        ctx.strokeStyle = '#7a5a3a';
+        ctx.lineWidth = 10;
+        ctx.strokeRect(5, 5, 502, 118);
+        ctx.fillStyle = '#7a2f4a';
+        ctx.font = 'italic 800 54px Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(name, 256, 66, 480);
+        const tex = new THREE.CanvasTexture(c);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        add(new THREE.PlaneGeometry(1.6, 0.4), new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide }), 0, 0, 0.02);
+        break;
+      }
+      case 'card_reader':
+        add(new RoundedBoxGeometry(0.16, 0.06, 0.24, 2, 0.02), mat('#1d1b22'), 0, 0.03, 0);
+        add(new THREE.PlaneGeometry(0.1, 0.07), new THREE.MeshBasicMaterial({ color: '#3ddc84' }), 0, 0.062, -0.03).rotation.x = -Math.PI / 2;
+        break;
+      case 'sofa': {
+        const fabric = mat('#7a3a5a', { roughness: 0.9 });
+        add(new RoundedBoxGeometry(1.8, 0.4, 0.8, 3, 0.1), fabric, 0, 0.3, 0);
+        add(new RoundedBoxGeometry(1.8, 0.6, 0.2, 3, 0.08), fabric, 0, 0.7, -0.35);
+        for (const x of [-0.85, 0.85]) add(new RoundedBoxGeometry(0.2, 0.5, 0.8, 3, 0.08), fabric, x, 0.5, 0);
+        add(new RoundedBoxGeometry(0.4, 0.3, 0.1, 2, 0.05), mat('#ffd96a'), -0.4, 0.62, -0.2);
+        break;
+      }
+      case 'tasting_bar': {
+        add(new RoundedBoxGeometry(1.2, 1.0, 0.5, 2, 0.05), mat('#5a3a2a'), 0, 0.5, 0);
+        add(new RoundedBoxGeometry(1.3, 0.06, 0.6, 2, 0.02), mat('#d8b56a', { metalness: 0.6, roughness: 0.3 }), 0, 1.03, 0);
+        for (const x of [-0.35, 0.35]) {
+          add(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 16), mat('#2a2420'), x, 0.7, 0.55);
+          add(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 8), mat('#888', { metalness: 0.8 }), x, 0.35, 0.55);
+        }
+        for (const [x, col] of [[-0.4, '#e8435a'], [-0.15, '#5fe0b0'], [0.1, '#ffb020'], [0.35, '#c69bff']] as const) {
+          add(new THREE.CylinderGeometry(0.035, 0.035, 0.14, 10), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.3 }), x as number, 1.13, 0);
+        }
+        break;
+      }
+      case 'cctv': {
+        add(new THREE.BoxGeometry(0.08, 0.08, 0.2), mat('#ddd'), 0, 0, 0.1);
+        const cam = add(new RoundedBoxGeometry(0.16, 0.14, 0.32, 2, 0.04), mat('#f2f2f2'), -0.05, -0.08, 0.3);
+        cam.rotation.set(0.5, -0.6, 0);
+        add(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: '#ff2a3a' }), -0.12, -0.04, 0.44);
+        break;
+      }
+      case 'neon': {
+        add(new THREE.PlaneGeometry(1.8, 1.2), new THREE.MeshBasicMaterial({ color: '#2a1838', side: THREE.DoubleSide }), 0, 0, 0);
+        const tube = new THREE.MeshStandardMaterial({ color: '#ff4fa3', emissive: '#ff4fa3', emissiveIntensity: 2.2 });
+        const ring = add(new THREE.TorusGeometry(0.32, 0.03, 8, 40), tube, -0.4, 0.05, 0.03);
+        ring.rotation.set(0, 0, 0);
+        add(new THREE.TorusGeometry(0.18, 0.03, 8, 30), new THREE.MeshStandardMaterial({ color: '#3ad7ff', emissive: '#3ad7ff', emissiveIntensity: 2.2 }), 0.35, 0.15, 0.03);
+        add(new THREE.BoxGeometry(0.7, 0.04, 0.04), tube, 0.3, -0.3, 0.03);
+        const glow = new THREE.PointLight('#ff4fa3', 6, 4);
+        glow.position.set(0, 0, 0.6);
+        g.add(glow);
+        break;
+      }
+      case 'lounge': {
+        add(new THREE.CylinderGeometry(1.1, 1.1, 0.01, 40), mat('#3a5a4a', { roughness: 0.95 }), 0, 0.006, 0);
+        for (const x of [-0.6, 0.6]) {
+          const chair = new THREE.Group();
+          const leather = mat('#6b4226', { roughness: 0.5 });
+          const seat = new THREE.Mesh(new RoundedBoxGeometry(0.7, 0.35, 0.7, 3, 0.1), leather);
+          seat.position.y = 0.3;
+          const back = new THREE.Mesh(new RoundedBoxGeometry(0.7, 0.6, 0.18, 3, 0.08), leather);
+          back.position.set(0, 0.65, 0.28);
+          chair.add(seat, back);
+          chair.position.set(x, 0, 0);
+          chair.rotation.y = x < 0 ? Math.PI * 0.85 : -Math.PI * 0.85;
+          g.add(chair);
+        }
+        add(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 20), mat('#d8b56a', { metalness: 0.7, roughness: 0.3 }), 0, 0.5, -0.1);
+        add(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8), mat('#d8b56a', { metalness: 0.7 }), 0, 0.25, -0.1);
+        break;
+      }
+    }
+    return g;
   }
 
   // --- People -----------------------------------------------------------------------------

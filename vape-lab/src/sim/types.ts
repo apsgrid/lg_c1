@@ -73,6 +73,8 @@ export interface CustomerDef {
 }
 
 export interface GameData {
+  /** Ready-made supplier products (ids filled in on load). */
+  wholesale?: Product[];
   notes: NoteDef[];
   bases: BaseDef[];
   synergies: SynergyDef[];
@@ -98,6 +100,8 @@ export interface Brand {
   name: string;
   /** Missing on older saves: treated as refillable. */
   format?: Format;
+  /** Bought ready-made from a supplier rather than designed in the Lab. */
+  wholesale?: boolean;
   labelColour: string;
   style: PackStyle;
   logo: Logo;
