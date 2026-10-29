@@ -443,6 +443,9 @@ details.danger { margin-top: 24px; color: var(--muted); }
 .tonight p { margin: 0; }
 .round-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 3px; text-align: left; font-size: 13px; }
 
+.export-btn { position: absolute; top: 10px; right: 10px; z-index: 3; font-size: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(20, 18, 30, 0.75); backdrop-filter: blur(6px); border-color: rgba(255, 255, 255, 0.12); }
+.export-btn:hover:not(:disabled) { border-color: var(--accent-2); }
+
 /* --- Look & feel polish ------------------------------------------------------------- */
 :root { --display: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif; --card: #211e2e; --card-hi: rgba(255, 255, 255, 0.045); }
 html, body { background: radial-gradient(1200px 600px at 20% -10%, #2a1a3a 0%, transparent 60%), radial-gradient(900px 500px at 110% 110%, #10283a 0%, transparent 60%), var(--bg); }

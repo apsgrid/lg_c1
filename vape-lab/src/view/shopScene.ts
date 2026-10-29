@@ -791,6 +791,7 @@ export class ShopScene {
 
     // Soft blob shadow on the floor.
     const shadow = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.75), new THREE.MeshBasicMaterial({ map: blobShadowTexture(), transparent: true, depthWrite: false }));
+    shadow.userData.noExport = true;
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = 0.012;
     g.add(shadow);

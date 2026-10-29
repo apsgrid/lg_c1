@@ -1,5 +1,5 @@
 import './src/styles.css';
-import { canMakeOwn } from './src/sim';
+import { canMakeOwn, cityLoc, sellLocId, tierOf } from './src/sim';
 import { notifyShop, onShop, shopState } from './src/shopState';
 import { data, state, subscribe } from './src/state';
 import { h } from './src/ui/dom';
@@ -16,6 +16,10 @@ import { mountOrders } from './src/ui/orders';
 import { mountTuning } from './src/ui/tuning';
 import { LabScene } from './src/view/scene';
 import { ShopScene } from './src/view/shopScene';
+import { themeFor } from './src/view/districtTheme';
+import { exportScene, type ExportInput } from './src/view/exportScene';
+import { offerDownload } from './src/ui/download';
+import { toast } from './src/ui/toast';
 
 type ViewId = 'lab' | 'shop' | 'city';
 const phone = window.matchMedia('(max-width: 860px)');
@@ -164,6 +168,50 @@ mountCityMap(city.stage);
 mountCityPanel(city.left);
 city.mountTabs();
 onPlaceTapped(() => { if (phone.matches) city.select('left'); });
+
+// --- Export for Blender / Unreal ----------------------------------------------------------
+const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'scene';
+function exportButton(stage: HTMLElement, build: () => ExportInput): void {
+  const btn = h('button.export-btn', { title: 'Download this 3D scene (.glb + render settings, zipped) for Blender or Unreal' }, '🎬 Export for Blender / UE');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Exporting…';
+    try {
+      const input = build();
+      const zip = await exportScene(input);
+      const r = await offerDownload(`${input.name}.zip`, zip);
+      if (r === 'saved') toast(`Saved ${input.name}.zip: unzip it, or hand it straight to the Blender/Unreal scripts in render/.`, 'gold');
+      else if (r === 'failed') toast('Could not save the export here.');
+    } catch (e) {
+      console.error(e);
+      toast('Export failed. See the console for details.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🎬 Export for Blender / UE';
+    }
+  });
+  stage.append(btn);
+}
+exportButton(shop.stage, () => {
+  const s = shopState.shop;
+  const tier = tierOf(s);
+  const locId = tier.id === 'garage' ? s.home : sellLocId(s);
+  const theme = themeFor(locId);
+  return {
+    name: `shop-${locId}-${tier.id}`,
+    scene: shopScene.scene, camera: shopScene.camera, target: shopScene.controls.target, renderer: shopScene.renderer,
+    bloom: { strength: 0.5, threshold: 0.82 },
+    backdrop: [tier.id === 'garage' ? '#3a3040' : theme.sky, '#09080f'],
+    info: { view: 'shop', shopName: s.name, tier: tier.id, district: locId, districtName: cityLoc(data, locId)?.name, day: s.day, theme },
+  };
+});
+exportButton(lab.stage, () => ({
+  name: `lab-${slug(state.product.brand.name)}`,
+  scene: labScene.scene, camera: labScene.camera, target: labScene.controls.target, renderer: labScene.renderer,
+  bloom: { strength: 0.3, threshold: 0.92 },
+  backdrop: ['#14121c', '#14121c'],
+  info: { view: 'lab', product: state.product.brand.name, labelColour: state.product.brand.labelColour },
+}));
 
 // --- Lab lock: you mix your own flavours once you've moved into the garage ------------
 const labLock = h('div.lab-lock.lab-el', {},

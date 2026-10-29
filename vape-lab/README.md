@@ -83,12 +83,17 @@ Every district has a market share split between you, the three rival chains and 
 - **Winning draws the police.** Every district you lead adds a little heat each day, and big leads bring 🚨 **crackdowns**: extra patrols for 5 days and a raid risk even if you've kept your heat down.
 - **Run the city.** Lead 6 of the 11 districts (the biggest share, and at least 30%) to win. Go more than 1,000 cr into debt and the business goes under. Either way you can play on or start a new run.
 
+## High-end renders (Blender / Unreal)
+
+Use the browser game to try ideas, then press **🎬 Export for Blender / UE** on the Lab or Shop 3D view. It saves a zip with the scene as `.glb` (meshes, materials, textures, lights, the camera) and a render manifest. `render/blender/vape_render.py` and `render/unreal/vape_import.py` turn that into a lit, glowing render scene. See `render/README.md`.
+
 ## Layout
 
 ```
 data/          notes, bases, synergies, customers (JSON)
 src/sim/       pure TS: no DOM, no three.js, no Math.random
-src/view/      three.js scene + label texture
+src/view/      three.js scenes, label texture, scene export (.glb + manifest)
+render/        Blender and Unreal scripts that build a render from an export
 src/ui/        DOM panels, radar chart, dials, branding, testing, modes
 src/store/     localStorage persistence
 src/events.ts  plain events (also dispatched as window 'vapelab' CustomEvents)
