@@ -473,6 +473,14 @@ details.danger { margin-top: 24px; color: var(--muted); }
 .approve-steps ol { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
 .studio-approve > .primary.big { width: 100%; margin: 6px 0 10px; }
 
+.targets { display: grid; gap: 6px; margin-bottom: 10px; }
+.target { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--card); cursor: pointer; }
+.target > span { display: grid; gap: 2px; }
+.target { flex-direction: row; }
+.target input { flex: 0 0 auto; width: auto; margin-top: 3px; accent-color: var(--accent); }
+.export-dialog { position: fixed; inset: 0; z-index: 75; display: grid; place-items: center; background: rgba(10, 8, 16, 0.8); padding: 16px; }
+.export-dialog .card { width: min(460px, 100%); background: var(--panel-solid); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 10px; box-shadow: 0 30px 80px #000a; }
+
 /* --- Look & feel polish ------------------------------------------------------------- */
 :root { --display: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif; --card: #211e2e; --card-hi: rgba(255, 255, 255, 0.045); }
 html, body { background: radial-gradient(1200px 600px at 20% -10%, #2a1a3a 0%, transparent 60%), radial-gradient(900px 500px at 110% 110%, #10283a 0%, transparent 60%), var(--bg); }

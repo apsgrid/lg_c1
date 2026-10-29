@@ -1,6 +1,7 @@
 // Studio state: the current shot spec, its versions, the chat, and approved shots.
 // Kept in localStorage per browser.
 import { defaultSpec, normalizeSpec, type ShotSpec } from './spec';
+import type { EngineTarget } from '../export/engines';
 import type { RenderOptions } from './package';
 
 export interface ChatTurn { role: 'user' | 'assistant'; content: string; version?: number; note?: string }
@@ -9,11 +10,11 @@ export interface Approved { title: string; at: string; zip: string; spec: ShotSp
 
 const KEY = 'vapelab.v1.studio';
 
-interface Saved { spec: ShotSpec; versions: Version[]; chat: ChatTurn[]; approved: Approved[]; options: RenderOptions }
+interface Saved { spec: ShotSpec; versions: Version[]; chat: ChatTurn[]; approved: Approved[]; options: RenderOptions; targets: EngineTarget[] }
 
 function load(): Saved {
   const fresh = defaultSpec();
-  const base: Saved = { spec: fresh, versions: [{ n: 1, spec: fresh, note: 'Starting shot', at: new Date().toISOString() }], chat: [], approved: [], options: { resolution: '1920x1080', quality: 'high', motion: 'still' } };
+  const base: Saved = { spec: fresh, versions: [{ n: 1, spec: fresh, note: 'Starting shot', at: new Date().toISOString() }], chat: [], approved: [], options: { resolution: '1920x1080', quality: 'high', motion: 'still' }, targets: ['threejs', 'godot', 'unreal'] };
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return base;
@@ -24,6 +25,7 @@ function load(): Saved {
       chat: s.chat ?? [],
       approved: s.approved ?? [],
       options: { ...base.options, ...(s.options ?? {}) },
+      targets: Array.isArray(s.targets) ? s.targets : base.targets,
     };
   } catch {
     return base;

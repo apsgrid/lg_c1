@@ -101,20 +101,3 @@ export function unrealPrompt(spec: ShotSpec, plan: AssetPlanItem[], opts: Render
     '',
   ].join('\n');
 }
-
-export function packageReadme(spec: ShotSpec): string {
-  return [
-    `Vape Wars Studio shot: ${spec.title}`,
-    '',
-    'UNREAL_PROMPT.md           paste this to Claude on your Unreal PC: it does everything below',
-    'scene.glb                  the previewed scene (placeholder props named prop_<id>)',
-    'scene.render.json          camera, lights, look, render settings',
-    'shot.spec.json             the shot spec (load it back into the Studio to keep iterating)',
-    'assets.json                every prop: route (procedural / library / text3d), size, placement',
-    'LIBRARY_SHOPPING_LIST.md   Fab / Megascans searches for library props',
-    'TEXT3D_PROMPTS.md          prompts for the text-to-3D props',
-    'scripts/vape_import.py     Unreal editor script: import, swap assets, light, render',
-    'scripts/generate.py        text-to-3D generator (Meshy, Tripo, or manual)',
-    'scripts/vape_render.py     Blender alternative',
-  ].join('\n');
-}

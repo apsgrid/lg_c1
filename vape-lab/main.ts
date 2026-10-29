@@ -19,6 +19,8 @@ import { ShopScene } from './src/view/shopScene';
 import { themeFor } from './src/view/districtTheme';
 import { exportScene, type ExportInput } from './src/view/exportScene';
 import { offerDownload } from './src/ui/download';
+import { openExportDialog } from './src/ui/exportDialog';
+import { editSpec, saveStudio } from './src/studio/state';
 import { toast } from './src/ui/toast';
 import { initStudio, mountStudioApprove, mountStudioAssets, mountStudioChat, mountStudioShot } from './src/ui/studio';
 import { StudioScene } from './src/view/studioScene';
@@ -175,7 +177,7 @@ onPlaceTapped(() => { if (phone.matches) city.select('left'); });
 const studioView = makeView('studio', 'Chat', [
   { id: 'shot', label: 'Shot', mount: (el) => mountStudioShot(el) },
   { id: 'assets', label: 'Assets', mount: (el) => mountStudioAssets(el) },
-  { id: 'approve', label: 'Approve', mount: (el) => mountStudioApprove(el) },
+  { id: 'approve', label: 'Export', mount: (el) => mountStudioApprove(el) },
 ]);
 const studioScene = new StudioScene(studioView.stage, data);
 initStudio(studioScene);
@@ -185,26 +187,31 @@ studioView.mountTabs();
 // --- Export for Blender / Unreal ----------------------------------------------------------
 const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'scene';
 function exportButton(stage: HTMLElement, build: () => ExportInput): void {
-  const btn = h('button.export-btn', { title: 'Download this 3D scene (.glb + render settings, zipped) for Blender or Unreal' }, '🎬 Export for Blender / UE');
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    btn.textContent = 'Exporting…';
-    try {
-      const input = build();
-      const zip = await exportScene(input);
-      const r = await offerDownload(`${input.name}.zip`, zip);
-      if (r === 'saved') toast(`Saved ${input.name}.zip: unzip it, or hand it straight to the Blender/Unreal scripts in render/.`, 'gold');
-      else if (r === 'failed') toast('Could not save the export here.');
-    } catch (e) {
-      console.error(e);
-      toast('Export failed. See the console for details.');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '🎬 Export for Blender / UE';
-    }
+  const btn = h('button.export-btn', { title: 'Export this 3D scene for three.js, Godot, Unreal or Blender' }, '📦 Export 3D');
+  btn.addEventListener('click', () => {
+    const input = build();
+    openExportDialog(String(input.info.title ?? input.name), async (targets) => {
+      try {
+        const zip = await exportScene({ ...input, targets });
+        const r = await offerDownload(`${input.name}.zip`, zip);
+        if (r === 'saved') toast(`Saved ${input.name}.zip.`, 'gold');
+        else if (r === 'failed') toast('Could not save the export here.');
+      } catch (e) {
+        console.error(e);
+        toast('Export failed. See the console for details.');
+      }
+    });
   });
   stage.append(btn);
 }
+// The City view's map is 2D; its 3D version lives in the Studio.
+const cityTo3d = h('button.export-btn', { title: 'Open the city as a 3D scene in the Studio, to frame and export it' }, '🎬 3D city in Studio');
+cityTo3d.addEventListener('click', () => {
+  editSpec((x) => { x.scene = 'city'; x.camera.custom = undefined; x.camera.focus = 'room'; x.camera.shot = 'wide'; });
+  saveStudio('spec');
+  setView('studio');
+});
+city.stage.append(cityTo3d);
 exportButton(shop.stage, () => {
   const s = shopState.shop;
   const tier = tierOf(s);
@@ -215,7 +222,7 @@ exportButton(shop.stage, () => {
     scene: shopScene.scene, camera: shopScene.camera, target: shopScene.controls.target, renderer: shopScene.renderer,
     bloom: { strength: 0.5, threshold: 0.82 },
     backdrop: [tier.id === 'garage' ? '#3a3040' : theme.sky, '#09080f'],
-    info: { view: 'shop', shopName: s.name, tier: tier.id, district: locId, districtName: cityLoc(data, locId)?.name, day: s.day, theme },
+    info: { view: 'shop', title: `${s.name} (${tier.name})`, shopName: s.name, tier: tier.id, district: locId, districtName: cityLoc(data, locId)?.name, day: s.day, theme },
   };
 });
 exportButton(lab.stage, () => ({
@@ -223,7 +230,7 @@ exportButton(lab.stage, () => ({
   scene: labScene.scene, camera: labScene.camera, target: labScene.controls.target, renderer: labScene.renderer,
   bloom: { strength: 0.3, threshold: 0.92 },
   backdrop: ['#14121c', '#14121c'],
-  info: { view: 'lab', product: state.product.brand.name, labelColour: state.product.brand.labelColour },
+  info: { view: 'lab', title: `Lab: ${state.product.brand.name}`, product: state.product.brand.name, labelColour: state.product.brand.labelColour },
 }));
 
 // --- Lab lock: you mix your own flavours once you've moved into the garage ------------

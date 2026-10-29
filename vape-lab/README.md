@@ -93,7 +93,11 @@ Every district has a market share split between you, the three rival chains and 
 - **Winning draws the police.** Every district you lead adds a little heat each day, and big leads bring 🚨 **crackdowns**: extra patrols for 5 days and a raid risk even if you've kept your heat down.
 - **Run the city.** Lead 6 of the 11 districts (the biggest share, and at least 30%) to win. Go more than 1,000 cr into debt and the business goes under. Either way you can play on or start a new run.
 
-## High-end renders (Blender / Unreal)
+## Export to three.js, Godot, Unreal and Blender
+
+Every 3D scene (Lab, shop, the 3D city, the firebomb and Night Round streets, Studio shots) exports as `scene.glb` + `scene.json`, with a three.js viewer, a ready-to-open Godot 4 project, and Unreal and Blender scripts. See `render/README.md`. The 3D city is `src/view/cityScene3d.ts`; the 3D street is `src/view/streetScene.ts`, built from the same layout as the runs (`src/street/layout.ts`); engine targets are `src/export/engines.ts` and `render/godot/vape_scene.gd`.
+
+### Renders
 
 **Studio.** The **🎬 Studio** view is for designing shots by talking: describe the visual, Claude turns it into a shot spec, the three.js preview test-runs it, and you choose where each prop's final model comes from (built-in, a Fab/Megascans asset, or a text-to-3D generation). **Approve for Unreal** packages everything, with instructions for Claude on your Unreal PC. Code: `src/studio/` (spec, prompt, package, state), `src/view/studioScene.ts`, `src/view/props.ts`, `src/ui/studio.ts`, `render/text3d/generate.py`.
 

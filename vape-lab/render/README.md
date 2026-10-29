@@ -1,4 +1,36 @@
-# Rendering Vape Wars scenes in Blender and Unreal
+# Exporting Vape Wars to three.js, Godot, Unreal and Blender
+
+Every part of the game can be exported as a 3D scene:
+
+| Scene | Where |
+| --- | --- |
+| Lab bench, shop (any level, any district) | **📦 Export 3D** on the Lab and Shop views |
+| The city (districts, turf, rival stores, your places) | **🎬 3D city in Studio** on the City view, or Studio → Shot → Scene: *The city* |
+| A run's street: the Paperboy-style firebomb run or the Night Round, before or after | Studio → Shot → Scene: *A run's street* |
+| Any shot you describe (shop interiors and shopfronts with props and people) | Studio chat |
+
+Pick the engines when you export. You get one zip:
+
+```
+scene.glb          the scene: meshes, PBR materials, textures, lights, RenderCam, marker_* nodes
+scene.json         camera, lights (incl. ambient), look, glowing nodes, gameplay markers
+threejs/viewer.html   double-click: the scene with the game's look (loads three.js from a CDN)
+godot/             a Godot 4 project: open project.godot (Godot 4.3+), press Play
+scripts/           vape_import.py (Unreal), generate.py (text-to-3D), vape_render.py (Blender)
+```
+
+**Godot.** `main.tscn` instances `scene.glb`, and `vape_scene.gd` reads `scene.json` to set up the
+camera you framed, a WorldEnvironment (backdrop, ambient, ACES, glow, SSAO, fog), the lights
+and the neon. Tune *Light Scale*, *Glow Boost* and *Use SDFGI* on the Main node. Glowing meshes
+and lights are matched by name. Not yet run in Godot (the container can't run it), so the first
+open may need a tweak, which Claude on your PC can do.
+
+**Towards a playable port.** Every scene carries `marker_*` nodes, also listed in
+`scene.json` → `markers`: street targets (rival fronts, order houses), street start and end,
+city locations, and spots in shots. The game rules live in `src/sim/` as pure data in and data
+out, with the same JSON saves, so a Godot or Unreal front end can read a save and these scenes
+and drive them. That's the next step when you want it.
+
 
 ## The Studio (describe it, test it, approve it)
 

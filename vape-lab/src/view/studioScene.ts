@@ -3,7 +3,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { cityLoc, type GameData } from '../sim';
+import { cityLoc, nightOrders, type GameData, type NightOrder, type ShopState } from '../sim';
+import { buildCity3D } from './cityScene3d';
+import { buildStreet3D } from './streetScene';
 import { WALL_KINDS, type PersonSpec, type ShotSpec, type Spot } from '../studio/spec';
 import { drawDistrictView, themeFor } from './districtTheme';
 import { blobShadowTexture, Post } from './post';
@@ -84,6 +86,8 @@ export class StudioScene {
   private active = false;
   private clock = new THREE.Clock();
   spec: ShotSpec | null = null;
+  /** The game state the city and street scenes are built from. */
+  shopProvider: (() => ShopState) | null = null;
 
   constructor(private container: HTMLElement, private data: GameData) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -165,6 +169,8 @@ export class StudioScene {
     const [W, D] = SIZES[spec.size];
     const night = spec.time === 'night' || spec.time === 'late';
     const [skyTop, skyBottom] = SKY[spec.time];
+    // The studio reflection environment reads as daylight: keep it faint at night.
+    this.scene.environmentIntensity = night ? 0.12 : spec.time === 'dusk' ? 0.3 : 0.45;
 
     // Sky, fog and the overall light.
     if (this.scene.background instanceof THREE.Texture) this.scene.background.dispose();
@@ -183,6 +189,10 @@ export class StudioScene {
     g.add(hemi, key, key.target);
 
     const wet = spec.weather.rain > 0.3;
+    if (spec.scene !== 'shop' && this.shopProvider) {
+      this.buildWorld(g, spec, key, night, wet);
+      return;
+    }
     if (spec.setting === 'interior') this.buildInterior(g, spec, W, D, wet);
     else this.buildShopfront(g, spec, W, wet);
 
@@ -226,6 +236,64 @@ export class StudioScene {
 
     if (spec.weather.rain > 0.02) this.addRain(spec, W, D);
     this.frame(spec, W, D);
+  }
+
+  /** The city, or a run's street: built from the game state, then framed and lit to fit. */
+  private buildWorld(g: THREE.Group, spec: ShotSpec, key: THREE.DirectionalLight, night: boolean, wet: boolean): void {
+    const shop = this.shopProvider!();
+    let focus: THREE.Vector3;
+    let dirs: Record<ShotSpec['camera']['shot'], THREE.Vector3>;
+    let span: number;
+    if (spec.scene === 'city') {
+      const city = buildCity3D(shop, this.data, { night, wet });
+      g.add(city.group);
+      focus = spec.camera.focus === 'room' ? new THREE.Vector3(0, 0, 20) : (city.focus[spec.district] ?? new THREE.Vector3());
+      span = spec.camera.focus === 'room' ? 420 : 110;
+      dirs = { wide: new THREE.Vector3(0.1, 0.75, 1), medium: new THREE.Vector3(0.5, 0.6, 0.9), close: new THREE.Vector3(0.45, 0.35, 0.9), low: new THREE.Vector3(0.5, 0.04, 0.9), overhead: new THREE.Vector3(0.01, 1, 0.02) };
+      if (this.scene.fog instanceof THREE.FogExp2) this.scene.fog.density = 0.0006 + spec.weather.fog * 0.006;
+      this.rainBox = { x0: focus.x - 60, x1: focus.x + 60, z0: focus.z - 40, z1: focus.z + 80, top: 40 };
+    } else {
+      const rival = shop.rivals.find((r) => r.id === spec.street.rival) ?? shop.rivals[0];
+      const firebomb = spec.street.mode === 'firebomb';
+      const district = firebomb ? rival.loc : spec.district;
+      const real = firebomb ? [] : nightOrders(shop, this.data);
+      const orders: NightOrder[] = real.length ? real : ['Ana', 'Ben', 'Cal', 'Dee'].map((name, i) => ({ regularId: `r${i}`, name, archetype: 'fruit_fanatic', productId: '', productName: '', price: 0, door: 12 + i * 7 }));
+      let seed = 7;
+      for (const ch of `${spec.street.mode}:${rival.id}:${district}`) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+      const street = buildStreet3D({
+        mode: spec.street.mode, rivalName: rival.name, rivalColour: rival.colour, orders, theme: themeFor(district),
+        police: cityLoc(this.data, district)?.police ?? 0.5, seed, aftermath: spec.street.aftermath, night, wet,
+      });
+      g.add(street.group);
+      focus = (street.targets[0] ?? street.carAt).clone();
+      if (spec.camera.focus === 'door' || spec.camera.focus === 'counter') focus = street.carAt.clone().add(new THREE.Vector3(4, 1, 0));
+      if (spec.camera.focus === 'room') focus = new THREE.Vector3(Math.min(street.length / 2, 60), 2, -3);
+      span = spec.camera.focus === 'room' ? 120 : 40;
+      dirs = { wide: new THREE.Vector3(-0.6, 0.55, 1), medium: new THREE.Vector3(-0.4, 0.35, 1), close: new THREE.Vector3(-0.3, 0.25, 1), low: new THREE.Vector3(-0.5, 0.02, 1), overhead: new THREE.Vector3(0.01, 1, 0.05) };
+      if (this.scene.fog instanceof THREE.FogExp2) this.scene.fog.density = 0.002 + spec.weather.fog * 0.03;
+      this.rainBox = { x0: focus.x - 40, x1: focus.x + 40, z0: -12, z1: 25, top: 18 };
+    }
+    // Shadows sized to what's on screen.
+    key.position.copy(focus).add(new THREE.Vector3(span * 0.3, span * 0.8, span * 0.5));
+    key.target.position.copy(focus);
+    Object.assign(key.shadow.camera, { left: -span * 0.7, right: span * 0.7, top: span * 0.7, bottom: -span * 0.7, near: 1, far: span * 3 });
+    key.shadow.camera.updateProjectionMatrix();
+    if (spec.weather.rain > 0.02) this.addRain(spec, 0, 0);
+    this.camera.fov = (2 * Math.atan(12 / spec.camera.lens) * 180) / Math.PI;
+    this.camera.far = 2000;
+    this.camera.updateProjectionMatrix();
+    this.controls.maxDistance = 900;
+    if (spec.camera.custom) {
+      this.camera.position.set(...spec.camera.custom.position);
+      this.controls.target.set(...spec.camera.custom.target);
+    } else {
+      const dist = { wide: 1, medium: 0.6, close: 0.3, low: 0.4, overhead: 1.1 }[spec.camera.shot] * span * (28 / spec.camera.lens) ** 0.5;
+      const pos = focus.clone().addScaledVector(dirs[spec.camera.shot].normalize(), dist);
+      if (spec.camera.shot === 'low') pos.y = spec.scene === 'city' ? 2 : 0.6;
+      this.camera.position.copy(pos);
+      this.controls.target.copy(focus).add(new THREE.Vector3(0, spec.camera.shot === 'low' ? (spec.scene === 'city' ? 18 : 3) : 0, 0));
+    }
+    this.controls.update();
   }
 
   private spotAt(spec: ShotSpec, spot: Spot, W: number, D: number, n: number, wall: boolean): { x: number; y: number; z: number; rotY: number } {
@@ -494,6 +562,8 @@ export class StudioScene {
   }
 
   private frame(spec: ShotSpec, W: number, D: number): void {
+    this.camera.far = 200;
+    this.controls.maxDistance = 30;
     this.camera.fov = (2 * Math.atan(12 / spec.camera.lens) * 180) / Math.PI;
     this.camera.updateProjectionMatrix();
     if (spec.camera.custom) {

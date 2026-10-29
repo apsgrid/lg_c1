@@ -48,9 +48,22 @@ export interface PersonSpec {
   colour?: string;
 }
 
+export type SceneKind = 'shop' | 'city' | 'street';
+export interface StreetSpec {
+  /** The Paperboy-style firebomb run on a rival's street, or the Night Round to regulars' doors. */
+  mode: 'firebomb' | 'delivery';
+  /** Rival id for a firebomb street (their district sets the look). */
+  rival: string;
+  /** Show the result: fronts on fire / parcels on the doorsteps. */
+  aftermath: boolean;
+}
+
 export interface ShotSpec {
   version: 1;
   title: string;
+  /** What's being shot: a shop (interior or shopfront), the whole city, or a run's street. */
+  scene: SceneKind;
+  street: StreetSpec;
   setting: 'interior' | 'shopfront';
   district: string;
   size: 'small' | 'medium' | 'large';
@@ -79,6 +92,8 @@ export function defaultSpec(): ShotSpec {
   return {
     version: 1,
     title: 'Late shift in the CBD',
+    scene: 'shop',
+    street: { mode: 'firebomb', rival: 'cloud_kings', aftermath: false },
     setting: 'interior',
     district: 'cbd',
     size: 'medium',
@@ -160,9 +175,17 @@ export function normalizeSpec(raw: unknown, base: ShotSpec = defaultSpec()): Sho
   const custom = (cam.custom ?? null) as Record<string, unknown> | null;
   const used = new Set<string>();
   const cpos = custom ? vec3(custom.position) : null, ctgt = custom ? vec3(custom.target) : null;
+  const st = (o.street ?? {}) as Record<string, unknown>;
+  const baseStreet = base.street ?? { mode: 'firebomb', rival: 'cloud_kings', aftermath: false };
   return {
     version: 1,
     title: str(o.title, base.title, 80),
+    scene: pick(o.scene, ['shop', 'city', 'street'] as const, base.scene ?? 'shop'),
+    street: {
+      mode: pick(st.mode, ['firebomb', 'delivery'] as const, baseStreet.mode),
+      rival: str(st.rival, baseStreet.rival, 40),
+      aftermath: typeof st.aftermath === 'boolean' ? st.aftermath : baseStreet.aftermath,
+    },
     setting: pick(o.setting, ['interior', 'shopfront'] as const, base.setting),
     district: pick(o.district, DISTRICTS, base.district),
     size: pick(o.size, ['small', 'medium', 'large'] as const, base.size),
@@ -221,6 +244,12 @@ export function sketchSpec(text: string, current: ShotSpec): { spec: ShotSpec; c
   const s: ShotSpec = JSON.parse(JSON.stringify(current));
   const changes: string[] = [];
   const set = (label: string, fn: () => void) => { fn(); changes.push(label); };
+  if (/\b(night round|delivery|deliveries|delivering|parcels?)\b/.test(t)) set('Night Round street', () => { s.scene = 'street'; s.street.mode = 'delivery'; });
+  else if (/\b(firebomb|fire.?bomb|drive.?by|paperboy|street run)\b/.test(t)) set('firebomb street', () => { s.scene = 'street'; s.street.mode = 'firebomb'; });
+  else if (/\b(city|skyline|aerial|whole map|bird'?s.?eye)\b/.test(t)) set('the city', () => { s.scene = 'city'; });
+  else if (/\b(shop|store|counter|inside|interior|shopfront|shop front)\b/.test(t)) set('a shop', () => { s.scene = 'shop'; });
+  if (/\b(on fire|burning|aftermath|in flames|delivered)\b/.test(t)) set('aftermath', () => { s.street.aftermath = true; });
+  for (const [id, re] of [['cloud_kings', /cloud kings/], ['mist_co', /mist/], ['puff_palace', /puff palace/]] as const) if (re.test(t)) set(`rival ${id}`, () => { s.street.rival = id; });
   for (const [re, id] of DISTRICT_WORDS) if (re.test(t)) { set(`district: ${id}`, () => { s.district = id; }); break; }
   if (/\b(outside|exterior|shopfront|shop front|street|facade)\b/.test(t)) set('shopfront', () => { s.setting = 'shopfront'; });
   else if (/\b(inside|interior)\b/.test(t)) set('interior', () => { s.setting = 'interior'; });
