@@ -10,7 +10,8 @@
     "build:single": "npm run build && node scripts/build-single.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy": "npm run build && npx wrangler pages deploy dist --project-name=${CF_PAGES_PROJECT:-vape-wars} --branch=main"
   },
   "dependencies": {
     "three": "0.169.0"

@@ -12,6 +12,16 @@ npm run build      # typecheck + production build into dist/
 npm run build:single  # one self-contained dist/vape-lab.html (used for the phone link)
 ```
 
+## Publish to your website (Cloudflare Pages)
+
+```bash
+CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... npm run deploy   # builds dist/ and uploads it to the "vape-wars" Pages project
+```
+
+The token needs **Account → Cloudflare Pages → Edit**. Set `CF_PAGES_PROJECT` to use another project name. Then, in the Cloudflare dashboard, attach your domain under the Pages project's **Custom domains**. Or skip the token entirely: connect this GitHub repo to a Pages project (build command `npm run build`, output folder `dist`, root `vape-lab`) and every push deploys.
+
+On your own site, everything works except the Studio's Claude chat, which only exists inside Claude. There the chat falls back to the offline sketcher, and exports download normally.
+
 ## How to play
 
 1. **Formula** (left panel): pick a base, then drag bottles from the 3D shelf into the 4 slots. You can also click a bottle, drop it on the device, or use the slot dropdown. Proportion sliders run 0-100 game points. The radar chart updates live, and after a test it shows the last tested profile as a dashed outline.
