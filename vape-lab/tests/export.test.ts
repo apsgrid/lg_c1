@@ -34,15 +34,23 @@ describe('engine targets', () => {
   const glb = new Uint8Array([103, 108, 84, 70, 2, 0, 0, 0]);
   const manifest = { title: 'Test', camera: { position: [1, 2, 3], target: [0, 0, 0], fovY: 50 }, lights: [], emissiveNodes: ['emissive_1'], markers: [] };
 
-  it('Godot gets a complete project that loads scene.glb with the setup script', () => {
-    const files = Object.fromEntries(godotFiles('Test "shot"', glb, manifest).map((f) => [f.name, f.data]));
-    expect(Object.keys(files).sort()).toEqual(['godot/README.md', 'godot/main.tscn', 'godot/project.godot', 'godot/scene.glb', 'godot/scene.json', 'godot/vape_scene.gd']);
-    expect(files['godot/project.godot']).toContain('run/main_scene="res://main.tscn"');
-    expect(files['godot/project.godot']).not.toContain('"shot"');
-    expect(files['godot/main.tscn']).toContain('path="res://scene.glb"');
-    expect(files['godot/main.tscn']).toContain('path="res://vape_scene.gd"');
-    expect(files['godot/vape_scene.gd']).toContain('extends Node3D');
-    expect(JSON.parse(files['godot/scene.json'] as string).emissiveNodes).toEqual(['emissive_1']);
+  it('the zip is the Godot project, loading scene.glb with the setup script', () => {
+    const files = Object.fromEntries(godotFiles('Test "shot"').map((f) => [f.name, f.data]));
+    expect(Object.keys(files).sort()).toEqual(['README_GODOT.md', 'main.tscn', 'project.godot', 'vape_scene.gd']);
+    expect(files['project.godot']).toContain('run/main_scene="res://main.tscn"');
+    expect(files['project.godot']).not.toContain('"shot"');
+    expect(files['main.tscn']).toContain('path="res://scene.glb"');
+    expect(files['main.tscn']).toContain('path="res://vape_scene.gd"');
+    expect(files['vape_scene.gd']).toContain('extends Node3D');
+  });
+
+  it('a street export adds the playable run as the main scene', () => {
+    const files = Object.fromEntries(godotFiles('Street', { mode: 'firebomb', targets: [] }).map((f) => [f.name, f.data]));
+    expect(files['project.godot']).toContain('run/main_scene="res://run.tscn"');
+    expect(files['run.tscn']).toContain('make_camera = false');
+    expect(files['run.tscn']).toContain('parent="Setup" instance=ExtResource("3_scene")');
+    expect(files['run.gd']).toContain('func _land_on_front');
+    expect(JSON.parse(files['run.json'] as string).mode).toBe('firebomb');
   });
 
   it('three.js gets a self-contained viewer with the scene embedded', () => {
@@ -53,7 +61,7 @@ describe('engine targets', () => {
   });
 
   it('the readme lists what each picked target adds', () => {
-    expect(packageReadme('X', ['godot'])).toContain('godot/');
+    expect(packageReadme('X', ['godot'])).toContain('project.godot');
     expect(packageReadme('X', ['godot'])).not.toContain('threejs/');
   });
 });

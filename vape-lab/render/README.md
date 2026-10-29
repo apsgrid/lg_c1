@@ -1,5 +1,8 @@
 # Exporting Vape Wars to three.js, Godot, Unreal and Blender
 
+The Studio and the export buttons are creator tools. Turn on **Creator mode** with the 🛠
+button in the top bar (or open the game with `?creator` in the URL); players never see them.
+
 Every part of the game can be exported as a 3D scene:
 
 | Scene | Where |
@@ -14,16 +17,32 @@ Pick the engines when you export. You get one zip:
 ```
 scene.glb          the scene: meshes, PBR materials, textures, lights, RenderCam, marker_* nodes
 scene.json         camera, lights (incl. ambient), look, glowing nodes, gameplay markers
+project.godot      the zip itself is a Godot 4 project (main.tscn, vape_scene.gd, README_GODOT.md)
+run.tscn, run.gd, run.json   street exports only: the run, playable in Godot (the main scene)
 threejs/viewer.html   double-click: the scene with the game's look (loads three.js from a CDN)
-godot/             a Godot 4 project: open project.godot (Godot 4.3+), press Play
 scripts/           vape_import.py (Unreal), generate.py (text-to-3D), vape_render.py (Blender)
 ```
+
+The scene is stored once: Godot, Unreal and Blender all read the root `scene.glb`; only the
+three.js viewer carries its own copy, so it opens with a double-click.
 
 **Godot.** `main.tscn` instances `scene.glb`, and `vape_scene.gd` reads `scene.json` to set up the
 camera you framed, a WorldEnvironment (backdrop, ambient, ACES, glow, SSAO, fog), the lights
 and the neon. Tune *Light Scale*, *Glow Boost* and *Use SDFGI* on the Main node. Glowing meshes
 and lights are matched by name. Not yet run in Godot (the container can't run it), so the first
 open may need a tweak, which Claude on your PC can do.
+
+**The playable run (Godot).** Export a run's street (Studio → Scene: *A run's street*, the
+"before" version) with Godot ticked, open the project and press Play. You drive down that exact
+street: Left/Right (A/D) steer, Up/Down (W/S) change speed, Space/F/click throws. Hit the rival's
+fronts (or the lit doorsteps on the Night Round), leave the neighbours' windows alone, dodge the
+traffic and the dog, grab crates. Three dents and it's over; R restarts. `run.json` is the
+street's layout in metres (targets, windows, buildings, traffic, the run's tuning), and
+`run.gd` is the run's rules ported from the browser game: the same speeds, throw arc and
+target height, converted to metres. It hasn't been run in Godot yet, so expect to fix a script
+error or two on the first open; Claude on your PC can do that. A good test is
+`godot --headless --path <folder> --quit-after 300`, which imports the project and runs it
+briefly, printing any script errors.
 
 **Towards a playable port.** Every scene carries `marker_*` nodes, also listed in
 `scene.json` → `markers`: street targets (rival fronts, order houses), street start and end,

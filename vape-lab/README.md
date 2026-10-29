@@ -95,6 +95,8 @@ Every district has a market share split between you, the three rival chains and 
 
 ## Export to three.js, Godot, Unreal and Blender
 
+Creator tools (the 🎬 Studio and the 📦 Export buttons) only show in **Creator mode**: the 🛠 button in the top bar, or `?creator` in the URL. A street export with Godot ticked includes **the run, playable in Godot** (`render/godot/run.gd`).
+
 Every 3D scene (Lab, shop, the 3D city, the firebomb and Night Round streets, Studio shots) exports as `scene.glb` + `scene.json`, with a three.js viewer, a ready-to-open Godot 4 project, and Unreal and Blender scripts. See `render/README.md`. The 3D city is `src/view/cityScene3d.ts`; the 3D street is `src/view/streetScene.ts`, built from the same layout as the runs (`src/street/layout.ts`); engine targets are `src/export/engines.ts` and `render/godot/vape_scene.gd`.
 
 ### Renders

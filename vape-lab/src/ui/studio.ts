@@ -307,7 +307,7 @@ function measure(): MeasuredProp[] {
 
 const TARGET_HINT: Record<EngineTarget, string> = {
   threejs: 'viewer.html: double-click to look around the scene in a browser',
-  godot: 'a project folder: open project.godot in Godot 4.3+, press Play',
+  godot: 'the zip is a Godot 4.3+ project: open project.godot, press Play (a street export plays the run)',
   unreal: 'import script, asset swaps (Fab / text-to-3D) and a Movie Render Queue render, with UNREAL_PROMPT.md for Claude on your PC',
   blender: 'a script that lights and renders the scene in Cycles or Eevee',
 };
@@ -338,6 +338,7 @@ export function mountStudioApprove(root: HTMLElement): void {
           backdrop: [s.scene === 'shop' ? s.palette.wall : '#141a30', '#09080f'],
           info: { view: 'studio', scene: s.scene, title: s.title, district: s.district, districtName: districtName(s.district), time: s.time, fog: s.weather.fog, rain: s.weather.rain, render: o, spec: s },
           targets,
+          run: s.scene === 'street' ? scene.run : null,
           readme: studioReadmeLines(unreal),
           extraFiles: [
             { name: 'shot.spec.json', data: JSON.stringify(s, null, 2) },

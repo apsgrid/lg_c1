@@ -26,6 +26,8 @@ export interface ExportInput {
   readme?: string[];
   /** Engines to package for (default: all). */
   targets?: EngineTarget[];
+  /** A playable run for the street on screen (Godot gets run.gd + run.json). */
+  run?: object | null;
 }
 
 export const ALL_TARGETS: EngineTarget[] = ['threejs', 'godot', 'unreal', 'blender'];
@@ -124,7 +126,7 @@ export async function exportScene(input: ExportInput): Promise<Uint8Array> {
       ...(targets.includes('unreal') || targets.includes('blender') ? [{ name: 'scene.render.json', data: json }] : []),
       { name: 'README.txt', data: packageReadme(title, targets, input.readme) },
       ...(targets.includes('threejs') ? [{ name: 'threejs/viewer.html', data: threeViewer(title, bytes, manifest) }] : []),
-      ...(targets.includes('godot') ? godotFiles(title, bytes, manifest) : []),
+      ...(targets.includes('godot') ? godotFiles(title, input.run ?? undefined) : []),
       ...renderScripts(targets),
       ...(input.extraFiles ?? []),
     ]);

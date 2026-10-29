@@ -15,6 +15,8 @@ extends Node3D
 @export var glow_boost: float = 2.0
 ## Global illumination: nicer bounce light, slower.
 @export var use_sdfgi: bool = false
+## Add the camera framed in the game (off when a gameplay script brings its own).
+@export var make_camera: bool = true
 
 var manifest: Dictionary = {}
 
@@ -30,7 +32,8 @@ func _ready() -> void:
 		return
 	manifest = parsed
 	_environment()
-	_camera()
+	if make_camera:
+		_camera()
 	_lights()
 	_glow()
 	print("Vape Wars: set up '%s' (%s)" % [manifest.get("title", "scene"), manifest.get("view", "")])

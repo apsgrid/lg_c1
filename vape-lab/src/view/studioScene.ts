@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { cityLoc, nightOrders, type GameData, type NightOrder, type ShopState } from '../sim';
 import { buildCity3D } from './cityScene3d';
-import { buildStreet3D } from './streetScene';
+import { buildStreet3D, type RunData } from './streetScene';
 import { WALL_KINDS, type PersonSpec, type ShotSpec, type Spot } from '../studio/spec';
 import { drawDistrictView, themeFor } from './districtTheme';
 import { blobShadowTexture, Post } from './post';
@@ -88,6 +88,8 @@ export class StudioScene {
   spec: ShotSpec | null = null;
   /** The game state the city and street scenes are built from. */
   shopProvider: (() => ShopState) | null = null;
+  /** The playable run for the street on screen (null for other scenes). */
+  run: RunData | null = null;
 
   constructor(private container: HTMLElement, private data: GameData) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -165,6 +167,7 @@ export class StudioScene {
     this.root.name = 'Shot';
     this.scene.add(this.root);
     this.rain = null;
+    this.run = null;
     const g = this.root;
     const [W, D] = SIZES[spec.size];
     const night = spec.time === 'night' || spec.time === 'late';
@@ -265,6 +268,7 @@ export class StudioScene {
         police: cityLoc(this.data, district)?.police ?? 0.5, seed, aftermath: spec.street.aftermath, night, wet,
       });
       g.add(street.group);
+      this.run = street.run;
       focus = (street.targets[0] ?? street.carAt).clone();
       if (spec.camera.focus === 'door' || spec.camera.focus === 'counter') focus = street.carAt.clone().add(new THREE.Vector3(4, 1, 0));
       if (spec.camera.focus === 'room') focus = new THREE.Vector3(Math.min(street.length / 2, 60), 2, -3);

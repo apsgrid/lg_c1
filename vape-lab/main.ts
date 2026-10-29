@@ -275,10 +275,30 @@ function setView(v: ViewId): void {
 for (const [id, label] of [['lab', 'Lab'], ['shop', 'Shop'], ['city', 'City'], ['studio', '🎬 Studio']] as const) {
   viewSeg.append(h('button', { role: 'radio', 'data-view': id, onclick: () => setView(id) }, label));
 }
+
+// --- Creator mode: the Studio and export tools, hidden from players by default --------------
+const CREATOR_KEY = 'vapelab.v1.creator';
+let creator = /[?&]creator\b/.test(location.search);
+try { creator ||= localStorage.getItem(CREATOR_KEY) === '1'; } catch { /* ignore */ }
+const creatorBtn = h('button.creator-toggle', { title: 'Creator mode: the Studio and 3D export tools', 'aria-pressed': 'false' }, '🛠');
+const applyCreator = () => {
+  app.classList.toggle('creator', creator);
+  creatorBtn.setAttribute('aria-pressed', String(creator));
+  creatorBtn.classList.toggle('on', creator);
+  try { localStorage.setItem(CREATOR_KEY, creator ? '1' : '0'); } catch { /* ignore */ }
+  if (!creator && app.dataset.view === 'studio') setView('shop');
+};
+creatorBtn.addEventListener('click', () => {
+  creator = !creator;
+  applyCreator();
+  toast(creator ? 'Creator mode on: the 🎬 Studio and 📦 Export buttons are back.' : 'Creator mode off.');
+});
+top.append(creatorBtn);
 // New players start at the car boot; returning players land where they left off.
 let startView: ViewId = canMakeOwn(shopState.shop) ? 'lab' : 'shop';
 try { startView = (localStorage.getItem('vapelab.v1.view') as ViewId) || startView; } catch { /* ignore */ }
-setView(['lab', 'shop', 'city', 'studio'].includes(startView) ? startView : 'shop');
+setView(['lab', 'shop', 'city', 'studio'].includes(startView) && (startView !== 'studio' || creator) ? startView : 'shop');
+applyCreator();
 renderLabLock();
 phone.addEventListener('change', () => setView(app.dataset.view as ViewId));
 

@@ -476,10 +476,16 @@ details.danger { margin-top: 24px; color: var(--muted); }
 .targets { display: grid; gap: 6px; margin-bottom: 10px; }
 .target { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--card); cursor: pointer; }
 .target > span { display: grid; gap: 2px; }
-.target { flex-direction: row; }
+.right label.target, .export-dialog label.target { display: flex; flex-direction: row; margin-bottom: 0; color: var(--ink); }
+.right label.target input, .export-dialog label.target input { width: auto; }
 .target input { flex: 0 0 auto; width: auto; margin-top: 3px; accent-color: var(--accent); }
 .export-dialog { position: fixed; inset: 0; z-index: 75; display: grid; place-items: center; background: rgba(10, 8, 16, 0.8); padding: 16px; }
 .export-dialog .card { width: min(460px, 100%); background: var(--panel-solid); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 10px; box-shadow: 0 30px 80px #000a; }
+
+/* Creator mode: the Studio and export tools only show when it's on. */
+#app:not(.creator) .export-btn, #app:not(.creator) .view-seg [data-view='studio'] { display: none !important; }
+.creator-toggle { border-radius: 999px; padding: 4px 9px; background: transparent; opacity: 0.6; }
+.creator-toggle.on { opacity: 1; border-color: var(--accent); background: rgba(255, 79, 163, 0.15); }
 
 /* --- Look & feel polish ------------------------------------------------------------- */
 :root { --display: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif; --card: #211e2e; --card-hi: rgba(255, 255, 255, 0.045); }

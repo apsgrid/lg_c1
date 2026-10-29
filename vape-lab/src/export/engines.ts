@@ -1,6 +1,7 @@
 // Engine targets for a scene export: what goes in the zip for three.js, Godot,
 // Unreal and Blender. Every target reads the same scene.glb + scene.json.
 import blenderPy from '../../render/blender/vape_render.py?raw';
+import runGd from '../../render/godot/run.gd?raw';
 import godotGd from '../../render/godot/vape_scene.gd?raw';
 import generatePy from '../../render/text3d/generate.py?raw';
 import unrealPy from '../../render/unreal/vape_import.py?raw';
@@ -78,10 +79,15 @@ renderer.setAnimationLoop(() => { controls.update(); composer.render(); });
 `;
 }
 
-export function godotFiles(title: string, glb: Uint8Array, manifest: object): ZipEntry[] {
+/**
+ * The zip itself is the Godot project: project.godot sits next to scene.glb and scene.json
+ * (which the Unreal and Blender scripts read too), so the scene is stored once.
+ * With a run (a street export), the playable run is the main scene.
+ */
+export function godotFiles(title: string, run?: object): ZipEntry[] {
   const name = title.replace(/"/g, "'");
-  return [
-    { name: 'godot/project.godot', data: `; Engine configuration file.
+  const files: ZipEntry[] = [
+    { name: 'project.godot', data: `; Engine configuration file.
 ; Exported from Vape Wars. Open this folder in Godot 4.3 or later (Import → project.godot).
 
 config_version=5
@@ -89,7 +95,7 @@ config_version=5
 [application]
 
 config/name="Vape Wars: ${name}"
-run/main_scene="res://main.tscn"
+run/main_scene="res://${run ? 'run' : 'main'}.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 
 [rendering]
@@ -97,7 +103,7 @@ config/features=PackedStringArray("4.3", "Forward Plus")
 anti_aliasing/quality/msaa_3d=2
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
 ` },
-    { name: 'godot/main.tscn', data: `[gd_scene load_steps=3 format=3]
+    { name: 'main.tscn', data: `[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://vape_scene.gd" id="1_setup"]
 [ext_resource type="PackedScene" path="res://scene.glb" id="2_scene"]
@@ -107,19 +113,39 @@ script = ExtResource("1_setup")
 
 [node name="Scene" parent="." instance=ExtResource("2_scene")]
 ` },
-    { name: 'godot/vape_scene.gd', data: godotGd },
-    { name: 'godot/scene.glb', data: glb },
-    { name: 'godot/scene.json', data: JSON.stringify(manifest, null, 2) },
-    { name: 'godot/README.md', data: `# ${name} (Godot 4)
+    { name: 'vape_scene.gd', data: godotGd },
+    { name: 'README_GODOT.md', data: `# ${name} (Godot 4)
 
-1. Open Godot 4.3 or later → **Import** → pick \`project.godot\` in this folder. Godot imports \`scene.glb\` the first time (a few seconds).
-2. Press **F5** (or Play). \`main.tscn\` loads the scene and \`vape_scene.gd\` sets up the camera you framed in the game, the environment (backdrop, ambient light, ACES, glow, fog), the lights and the neon.
-3. Tune on the **Main** node in the Inspector: *Light Scale*, *Glow Boost*, *Use SDFGI*.
-
+1. Unzip, then open Godot 4.3 or later → **Import** → pick \`project.godot\` in this folder. Godot imports \`scene.glb\` the first time (a few seconds; ignore the other files).
+2. Press **F5** (Play).${run ? ' That starts **the run**: steer with Left/Right (A/D), speed with Up/Down (W/S), throw with Space or F (or click). R restarts when it\'s over.\n   `main.tscn` is the still shot, as framed in the game (open it and press F6).' : ' `main.tscn` shows the scene as framed in the game.'}
+3. \`vape_scene.gd\` sets up the camera, the environment (backdrop, ambient, ACES, glow, fog), the lights and the neon. Tune *Light Scale*, *Glow Boost* and *Use SDFGI* on its node in the Inspector.
+${run ? '4. \`run.gd\` is the run\'s rules and \`run.json\` the street\'s layout (targets, windows, buildings, traffic), in metres. Export the "before" version of the street to play it (the "after" one already has the fires or parcels).\n' : ''}
 Nodes named \`marker_*\` are gameplay markers (street targets, city locations, shop spots) for scripts to use.
-To keep the scene editable, open \`scene.glb\` → *New Inherited Scene*, or right-click the Scene node → *Editable Children*.
+To edit the scene, open \`scene.glb\` → *New Inherited Scene*.
 ` },
   ];
+  if (run) {
+    files.push(
+      { name: 'run.gd', data: runGd },
+      { name: 'run.json', data: JSON.stringify(run, null, 2) },
+      { name: 'run.tscn', data: `[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://run.gd" id="1_run"]
+[ext_resource type="Script" path="res://vape_scene.gd" id="2_setup"]
+[ext_resource type="PackedScene" path="res://scene.glb" id="3_scene"]
+
+[node name="Run" type="Node3D"]
+script = ExtResource("1_run")
+
+[node name="Setup" type="Node3D" parent="."]
+script = ExtResource("2_setup")
+make_camera = false
+
+[node name="Scene" parent="Setup" instance=ExtResource("3_scene")]
+` },
+    );
+  }
+  return files;
 }
 
 export function renderScripts(targets: EngineTarget[]): ZipEntry[] {
@@ -132,7 +158,7 @@ export function renderScripts(targets: EngineTarget[]): ZipEntry[] {
 export function packageReadme(title: string, targets: EngineTarget[], extra: string[] = []): string {
   const lines = [`Vape Wars scene: ${title}`, '', 'scene.glb       the scene (meshes, materials, textures, lights, RenderCam, marker_* nodes)', 'scene.json      camera, lights, look, glowing nodes, markers (every engine reads this)'];
   if (targets.includes('threejs')) lines.push('threejs/        viewer.html: double-click to open the scene in a browser');
-  if (targets.includes('godot')) lines.push('godot/          a Godot 4 project: open project.godot, press Play');
+  if (targets.includes('godot')) lines.push('project.godot   this folder is a Godot 4 project: open it, press Play (README_GODOT.md)');
   if (targets.includes('unreal')) lines.push('scripts/vape_import.py   Unreal editor script (see render/README.md in the repo)', 'scripts/generate.py      text-to-3D models for Studio shots');
   if (targets.includes('blender')) lines.push('scripts/vape_render.py   Blender: blender --background --python scripts/vape_render.py -- .');
   return [...lines, ...extra].join('\n');

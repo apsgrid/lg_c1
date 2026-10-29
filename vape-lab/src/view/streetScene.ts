@@ -7,7 +7,10 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mulberry32, type NightOrder } from '../sim';
-import { AWNINGS, buildStreet, buildTraffic, FACADE, KERB, METRES as M, type Lot, type Mode, type Thing } from '../street/layout';
+import { AWNINGS, buildStreet, buildTraffic, FACADE, KERB, LANE, METRES as M, type Lot, type Mode, type Thing } from '../street/layout';
+
+/** Height (run units) below which a throw counts as reaching a front or doorstep, as in the 2D run. */
+const TARGET_Z = 62;
 import type { DistrictTheme } from './districtTheme';
 
 // Identical materials are shared (engines import one material, not hundreds); reset per build.
@@ -35,7 +38,28 @@ export interface StreetOptions {
   wet: boolean;
 }
 
-export interface StreetBuild { group: THREE.Group; length: number; targets: THREE.Vector3[]; carAt: THREE.Vector3 }
+/**
+ * Everything a game engine needs to play the run on this street, in metres
+ * (X along the street, Z across it with buildings at -Z, Y up). Read by render/godot/run.gd.
+ */
+export interface RunData {
+  format: 'vape-wars-run';
+  version: 1;
+  mode: Mode;
+  title: string;
+  length: number;
+  lane: number;
+  facadeZ: number;
+  targetY: number;
+  ammo: number;
+  start: [number, number];
+  targets: Array<{ x0: number; x1: number; name: string; node: string; door?: number }>;
+  buildings: Array<{ x0: number; x1: number; h: number }>;
+  windows: Array<{ x0: number; x1: number; y0: number; y1: number }>;
+  obstacles: Array<{ kind: string; node: string; x: number; z: number; hl: number; hw: number; vx: number; vz: number }>;
+}
+
+export interface StreetBuild { group: THREE.Group; length: number; targets: THREE.Vector3[]; carAt: THREE.Vector3; run: RunData }
 
 function canvasTex(w: number, h: number, paint: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -324,10 +348,10 @@ export function buildStreet3D(o: StreetOptions): StreetBuild {
   }
   const targets: THREE.Vector3[] = [];
   lots.forEach((l, i) => buildLot(l, i, o, group, targets));
-  for (const t of things) {
+  things.forEach((t, i) => {
     const obj = thing(t);
-    if (obj) { obj.name = `traffic_${t.kind}`; group.add(obj); }
-  }
+    if (obj) { obj.name = `traffic_${i + 1}_${t.kind}`; group.add(obj); }
+  });
   // Street lamps both sides; a real light on every other one.
   let n = 0;
   for (let y = 150; y < end; y += 300) {
@@ -366,5 +390,20 @@ export function buildStreet3D(o: StreetOptions): StreetBuild {
     m.userData = { marker: name.slice(7) };
     group.add(m);
   }
-  return { group, length, targets, carAt };
+  const r = (n: number) => +n.toFixed(3);
+  let k = 0;
+  const run: RunData = {
+    format: 'vape-wars-run', version: 1, mode: o.mode,
+    title: o.mode === 'firebomb' ? `Firebomb run: ${o.rivalName}` : 'Night Round',
+    length: r(length), lane: r(LANE * M), facadeZ: r(FACADE * M), targetY: r(TARGET_Z * M),
+    ammo: o.mode === 'firebomb' ? 8 : o.orders.length + 3,
+    start: [2, r(-10 * M)],
+    targets: lots.filter((l) => l.kind === 'rival' || l.order).map((l) => ({
+      x0: r(l.y0 * M), x1: r(l.y1 * M), name: l.order ? l.order.name : (l.sign ?? o.rivalName), node: `marker_target_${++k}`, door: l.order?.door,
+    })),
+    buildings: lots.map((l) => ({ x0: r(l.y0 * M), x1: r(l.y1 * M), h: r(l.hgt * M) })),
+    windows: lots.filter((l) => l.kind !== 'rival' && !l.order).flatMap((l) => l.windows.map((w) => ({ x0: r((l.y0 + w.y0) * M), x1: r((l.y0 + w.y1) * M), y0: r(w.z0 * M), y1: r(w.z1 * M) }))),
+    obstacles: things.map((t, i) => ({ kind: t.kind, node: `traffic_${i + 1}_${t.kind}`, x: r(t.y * M), z: r(t.x * M), hl: r((t.l / 2) * M), hw: r((t.w / 2) * M), vx: r(t.vy * M), vz: r(t.vx * M) })),
+  };
+  return { group, length, targets, carAt, run };
 }
