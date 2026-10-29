@@ -1,5 +1,32 @@
 # Rendering Vape Wars scenes in Blender and Unreal
 
+## The Studio (describe it, test it, approve it)
+
+Open **🎬 Studio** in the game's top bar.
+
+1. **Chat** (left): describe the visual. Claude writes a *shot spec* (setting, district, time,
+   weather, palette, lights, camera, people, props) and the 3D preview test-runs it straight
+   away. Keep tweaking in plain words; every answer is a version you can go back to. Outside
+   Claude (a plain browser) an offline sketcher picks out districts, weather, colours, time,
+   camera words and props instead.
+2. **Shot**: the same spec as controls (sliders, colours, camera). Drag the preview to frame it
+   by hand and press **Use the current view**.
+3. **Assets**: pick each prop's final model: **Built-in** (the stylised preview model),
+   **Fab library** (a real Fab/Megascans asset, found by its search words) or **Text-to-3D**
+   (a bespoke model generated from its prompt).
+4. **Approve**: resolution, quality and still or push-in, then **Approve for Unreal**. You get
+   `studio-<title>.zip` with the scene, the spec, `assets.json`, a Fab shopping list, the
+   text-to-3D prompts, `UNREAL_PROMPT.md` and the scripts. Give `UNREAL_PROMPT.md` to Claude on
+   your Unreal PC. It runs `scripts/generate.py` (Meshy or Tripo with your API key, or manual),
+   checks your project for the Fab assets, then runs `scripts/vape_import.py`. That builds the
+   level, swaps every placeholder `prop_<id>` for its library or generated model (scaled to fit,
+   standing on the same spot), lights it and renders through Movie Render Queue.
+
+`render/examples/blender-studio-shopfront.png` is a Studio shot rendered by the Blender script
+with no hand tweaks.
+
+## Exporting from the Lab and Shop
+
 The browser game is the sandbox: try layouts, districts, upgrades and products there.
 When a scene looks right, press **🎬 Export for Blender / UE** (top right of the Lab or
 Shop 3D view). You get a zip:

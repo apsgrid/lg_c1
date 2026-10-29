@@ -47,7 +47,7 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
 .brand-mark { display: flex; align-items: center; gap: 6px; font-size: 16px; }
 .logo-dot { width: 14px; height: 14px; border-radius: 50%; background: conic-gradient(var(--accent), var(--accent-2), var(--gold), var(--accent)); }
 .view-tools { display: flex; align-items: center; gap: 12px; margin-left: auto; }
-#app:not([data-view='lab']) .lab-el, #app:not([data-view='shop']) .shop-el, #app:not([data-view='city']) .city-el { display: none !important; }
+#app:not([data-view='lab']) .lab-el, #app:not([data-view='shop']) .shop-el, #app:not([data-view='city']) .city-el, #app:not([data-view='studio']) .studio-el { display: none !important; }
 #app.lab-locked .view-tools.lab-el { visibility: hidden; }
 .view-seg button { font-weight: 600; }
 .cash-chip { font-weight: 700; font-variant-numeric: tabular-nums; padding: 4px 10px; border-radius: 999px; background: #2a2638; }
@@ -445,6 +445,33 @@ details.danger { margin-top: 24px; color: var(--muted); }
 
 .export-btn { position: absolute; top: 10px; right: 10px; z-index: 3; font-size: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(20, 18, 30, 0.75); backdrop-filter: blur(6px); border-color: rgba(255, 255, 255, 0.12); }
 .export-btn:hover:not(:disabled) { border-color: var(--accent-2); }
+
+/* Studio */
+.chat-log { display: grid; gap: 8px; max-height: 46vh; overflow-y: auto; padding: 4px 2px; margin-bottom: 8px; }
+.bubble-row { display: flex; }
+.bubble-row.user { justify-content: flex-end; }
+.chat-bubble { max-width: 88%; padding: 8px 11px; border-radius: 14px; background: #262236; font-size: 13.5px; white-space: pre-wrap; position: relative; }
+.bubble-row.user .chat-bubble { background: linear-gradient(135deg, #5a2a6a, #3a2a6a); border-bottom-right-radius: 4px; }
+.bubble-row.assistant .chat-bubble { border-bottom-left-radius: 4px; border: 1px solid var(--line); }
+.ver-chip { margin-left: 6px; padding: 0 7px; font-size: 11px; border-radius: 999px; background: rgba(58, 215, 255, 0.15); border-color: rgba(58, 215, 255, 0.4); color: var(--accent-2); }
+.chat-compose { display: grid; gap: 6px; }
+.chat-input { width: 100%; resize: vertical; background: #1a1824; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; color: inherit; }
+.chat-status { margin-left: auto; }
+.idea-chips .chip { text-transform: none; text-align: left; font-size: 12px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.studio-shot .field, .studio-approve .field, .studio-assets .field { display: grid; gap: 3px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.studio-shot select, .studio-shot input[type='text'], .studio-shot textarea, .studio-approve select, .studio-assets input[type='text'], .studio-assets textarea, .studio-assets select { background: #1a1824; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; color: var(--ink); font: inherit; width: 100%; }
+.palette-row { gap: 12px; }
+.colour-field { display: grid; justify-items: start; }
+.spec-json { width: 100%; font: 11.5px/1.35 ui-monospace, Menlo, monospace; }
+.versions { display: grid; gap: 4px; }
+.version { display: flex; gap: 8px; align-items: baseline; text-align: left; }
+.version.on { border-color: var(--accent); }
+.asset-card, .approve-card, .add-prop, .approve-steps { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; background: var(--card); display: grid; gap: 8px; }
+.asset-card .row { justify-content: space-between; }
+.route-seg button { font-size: 12px; padding: 4px 10px; }
+.approve-steps ol { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.studio-approve > .primary.big { width: 100%; margin: 6px 0 10px; }
 
 /* --- Look & feel polish ------------------------------------------------------------- */
 :root { --display: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif; --card: #211e2e; --card-hi: rgba(255, 255, 255, 0.045); }

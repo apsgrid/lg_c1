@@ -17,7 +17,13 @@ What it does:
      glowing materials (neon, LEDs) boosted.
   3. A cine camera at RenderCam looking at RenderTarget, a post-process volume with
      manual exposure (EV100 0, so values read like the browser's), bloom, Lumen.
-  4. Optionally a high-res screenshot from that camera into <project>/Saved/Screenshots.
+  4. Studio shots (zips from the game's Studio, with assets.json): swaps each placeholder
+     prop for a real one. "library" props use the best-matching StaticMesh already in
+     your project (add it from Fab first, see LIBRARY_SHOPPING_LIST.md); "text3d" props
+     use generated/<id>.glb made by render/text3d/generate.py. Missing ones stay as the
+     stylised placeholder and are listed in the summary.
+  5. Optionally renders: Movie Render Queue (a still, or a slow push-in clip) from the
+     shot's render settings, falling back to a high-res screenshot.
 """
 import json
 import math
@@ -44,21 +50,30 @@ def warn(msg):
 # --- Loading -----------------------------------------------------------------------------
 
 def load_export(path):
+    """Return (folder, glb, manifest). A zip is unpacked into a folder beside it (kept, so
+    generated/ models and edits live next to the shot)."""
     path = os.path.abspath(os.path.expanduser(path))
     if zipfile.is_zipfile(path):
-        folder = tempfile.mkdtemp(prefix="vapewars_")
+        folder = os.path.splitext(path)[0]
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError:
+            folder = tempfile.mkdtemp(prefix="vapewars_")
         with zipfile.ZipFile(path) as zf:
-            zf.extractall(folder)
+            for member in zf.namelist():
+                if not os.path.exists(os.path.join(folder, member)):
+                    zf.extract(member, folder)
         path = folder
-    glb = os.path.join(path, "scene.glb") if os.path.isdir(path) else path
-    man = os.path.join(os.path.dirname(glb), "scene.render.json")
+    folder = path if os.path.isdir(path) else os.path.dirname(path)
+    glb = os.path.join(folder, "scene.glb") if os.path.isdir(path) else path
+    man = os.path.join(folder, "scene.render.json")
     manifest = {}
     if os.path.exists(man):
         with open(man, encoding="utf-8") as f:
             manifest = json.load(f)
     if not os.path.exists(glb):
         raise FileNotFoundError(f"No scene.glb at {path}")
-    return glb, manifest
+    return folder, glb, manifest
 
 
 def colour(h):
@@ -268,16 +283,202 @@ def screenshot(cam, name, res):
         warn(f"Screenshot: {e}. Pilot VapeRenderCam in the viewport and use High Resolution Screenshot or Movie Render Queue.")
 
 
+# --- Studio asset swaps ---------------------------------------------------------------------------
+
+STOP = {"a", "an", "the", "of", "with", "and", "for", "set", "pack", "prop", "model"}
+
+
+def words(text):
+    return [w for w in "".join(c.lower() if c.isalnum() else " " for c in text).split() if w not in STOP]
+
+
+def find_library_mesh(query, roots):
+    """Best StaticMesh in the project whose name/path shares the most words with the query."""
+    reg = unreal.AssetRegistryHelpers.get_asset_registry()
+    want = set(words(query))
+    best, best_score = None, 0
+    for root in roots:
+        try:
+            assets = reg.get_assets_by_path(root, recursive=True)
+        except Exception:
+            continue
+        for ad in assets:
+            try:
+                cls = str(ad.asset_class_path.asset_name)
+            except Exception:
+                cls = str(getattr(ad, "asset_class", ""))
+            if cls != "StaticMesh":
+                continue
+            path = str(ad.package_name)
+            if "/VapeWars/" in path:
+                continue
+            have = set(words(path))
+            score = len(want & have) + (0.5 if ("Fab" in path or "Megascans" in path) else 0)
+            if score > best_score:
+                best, best_score = ad, score
+    if best is None or best_score < 1:
+        return None
+    return unreal.EditorAssetLibrary.load_asset(str(best.package_name))
+
+
+def import_generated(folder, prop_id, dest):
+    gen = os.path.join(folder, "generated")
+    for ext in (".glb", ".gltf", ".fbx", ".obj"):
+        f = os.path.join(gen, prop_id + ext)
+        if os.path.exists(f):
+            task = unreal.AssetImportTask()
+            task.filename = f
+            task.destination_path = f"{dest}/Generated/{prop_id}"
+            task.automated = True
+            task.replace_existing = True
+            task.save = True
+            unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
+            for path in unreal.EditorAssetLibrary.list_assets(task.destination_path, recursive=True):
+                a = unreal.EditorAssetLibrary.load_asset(path)
+                if isinstance(a, unreal.StaticMesh):
+                    return a
+    return None
+
+
+def place_like(mesh, placeholder):
+    """Spawn mesh where the placeholder stands, scaled to its size, standing on the same floor."""
+    sub = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    origin, extent = placeholder.get_actor_bounds(False)
+    actor = sub.spawn_actor_from_object(mesh, origin, placeholder.get_actor_rotation())
+    m_origin, m_extent = actor.get_actor_bounds(False)
+    big = max(m_extent.x, m_extent.y, m_extent.z, 0.01)
+    scale = max(extent.x, extent.y, extent.z) / big
+    actor.set_actor_scale3d(unreal.Vector(scale, scale, scale))
+    m_origin, m_extent = actor.get_actor_bounds(False)
+    loc = actor.get_actor_location()
+    actor.set_actor_location(unreal.Vector(
+        loc.x + (origin.x - m_origin.x), loc.y + (origin.y - m_origin.y),
+        loc.z + ((origin.z - extent.z) - (m_origin.z - m_extent.z))), False, False)
+    for a in [placeholder] + list(placeholder.get_attached_actors()):
+        try:
+            a.set_actor_hidden_in_game(True)
+            a.set_is_temporarily_hidden_in_editor(True)
+        except Exception:
+            pass
+    return actor
+
+
+def swap_assets(folder, dest, library_roots):
+    plan_path = os.path.join(folder, "assets.json")
+    if not os.path.exists(plan_path):
+        return
+    with open(plan_path, encoding="utf-8") as f:
+        plan = json.load(f)
+    missing = []
+    for item in plan.get("props", []):
+        route = item.get("route")
+        if route == "procedural":
+            continue
+        placeholder = find_actor(item.get("node", "prop_" + item["id"]))
+        if placeholder is None:
+            warn(f"{item['name']}: no placeholder actor {item.get('node')} in the level")
+            continue
+        mesh = find_library_mesh(item.get("query") or item["name"], library_roots) if route == "library" else import_generated(folder, item["id"], dest)
+        if mesh is None:
+            missing.append(item)
+            continue
+        try:
+            actor = place_like(mesh, placeholder)
+            actor.set_actor_label(f"Vape_{item['id']}")
+            log(f"{item['name']}: swapped in {mesh.get_path_name()}")
+        except Exception as e:
+            warn(f"{item['name']}: couldn't place {mesh.get_path_name()} ({e})")
+    for item in missing:
+        if item.get("route") == "library":
+            warn(f"{item['name']}: nothing in the project matches '{item.get('query')}'. Add one from Fab ({item.get('fabUrl')}) and run again with import_mode='skip'.")
+        else:
+            warn(f"{item['name']}: no generated/{item['id']}.glb yet. Run render/text3d/generate.py on this folder, then run again with import_mode='skip'.")
+
+
+def render_mrq(level_path, cam, name, out_dir, res, quality, motion):
+    """Movie Render Queue: a level sequence with the camera (still or slow push-in), rendered to PNG."""
+    w, h = (int(v) for v in res.lower().split("x"))
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+    seq_path = "/Game/VapeWars/Sequences"
+    seq_name = f"SEQ_{name}"
+    if unreal.EditorAssetLibrary.does_asset_exist(f"{seq_path}/{seq_name}"):
+        unreal.EditorAssetLibrary.delete_asset(f"{seq_path}/{seq_name}")
+    seq = tools.create_asset(seq_name, seq_path, unreal.LevelSequence, unreal.LevelSequenceFactoryNew())
+    fps = 24
+    frames = 1 if motion == "still" else fps * 5
+    seq.set_display_rate(unreal.FrameRate(fps, 1))
+    seq.set_playback_start(0)
+    seq.set_playback_end(frames)
+    binding = seq.add_possessable(cam)
+    cut_track = seq.add_track(unreal.MovieSceneCameraCutTrack)
+    cut = cut_track.add_section()
+    cut.set_range(0, frames)
+    try:
+        cut.set_camera_binding_id(seq.get_binding_id(binding))
+    except Exception:
+        cut.set_camera_binding_id(unreal.MovieSceneSequenceExtensions.get_portable_binding_id(seq, seq, binding))
+    if motion == "push-in":
+        tr = binding.add_track(unreal.MovieScene3DTransformTrack)
+        sec = tr.add_section()
+        sec.set_range(0, frames)
+        loc, rot = cam.get_actor_location(), cam.get_actor_rotation()
+        fwd = rot.get_forward_vector()
+        start, end = loc - fwd * 60, loc + fwd * 60
+        ch = sec.get_all_channels()
+        for i, (a, b) in enumerate(((start.x, end.x), (start.y, end.y), (start.z, end.z))):
+            ch[i].add_key(unreal.FrameNumber(0), a)
+            ch[i].add_key(unreal.FrameNumber(frames), b)
+        for i, v in enumerate((rot.roll, rot.pitch, rot.yaw)):
+            ch[3 + i].add_key(unreal.FrameNumber(0), v)
+    unreal.EditorAssetLibrary.save_loaded_asset(seq)
+
+    subsystem = unreal.get_editor_subsystem(unreal.MoviePipelineQueueSubsystem)
+    queue = subsystem.get_queue()
+    queue.delete_all_jobs()
+    job = queue.allocate_new_job(unreal.MoviePipelineExecutorJob)
+    job.job_name = name
+    job.sequence = unreal.SoftObjectPath(seq.get_path_name())
+    job.map = unreal.SoftObjectPath(level_path)
+    cfg = job.get_configuration()
+    out = cfg.find_or_add_setting_by_class(unreal.MoviePipelineOutputSetting)
+    out.output_resolution = unreal.IntPoint(w, h)
+    out.output_directory = unreal.DirectoryPath(out_dir)
+    out.file_name_format = "{sequence_name}.{frame_number}"
+    cfg.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
+    cfg.find_or_add_setting_by_class(unreal.MoviePipelineImageSequenceOutput_PNG)
+    aa = cfg.find_or_add_setting_by_class(unreal.MoviePipelineAntiAliasingSetting)
+    spatial, temporal = {"draft": (1, 1), "high": (4, 8), "final": (8, 16)}.get(quality, (4, 8))
+    aa.spatial_sample_count = spatial
+    aa.temporal_sample_count = temporal
+    aa.override_anti_aliasing = True
+    aa.anti_aliasing_method = unreal.AntiAliasingMethod.AAM_NONE
+    if quality != "draft":
+        aa.engine_warm_up_count = 32
+    subsystem.render_queue_with_executor(unreal.MoviePipelinePIEExecutor)
+    log(f"Movie Render Queue started: {w}x{h}, {quality}, {motion}. Frames go to {out_dir}")
+
+
 # --- Entry points ------------------------------------------------------------------------------
 
-def main(scene_path, render=False, light_scale=1.0, glow=3.0, exposure=0.0, res="1920x1080", import_mode="scene"):
+def main(scene_path, render=False, light_scale=1.0, glow=3.0, exposure=0.0, res=None, import_mode="scene",
+         library_roots=("/Game",), quality=None, motion=None):
+    """import_mode="skip" re-runs everything except the import (after adding Fab assets or generated models)."""
     LOG.clear()
-    glb, manifest = load_export(scene_path)
+    folder, glb, manifest = load_export(scene_path)
     name = safe_name(os.path.splitext(os.path.basename(scene_path.rstrip("/\\")))[0])
     dest = f"/Game/VapeWars/{name}"
+    opts = manifest.get("render", {})
+    res = res or opts.get("resolution", "1920x1080")
+    quality = quality or opts.get("quality", "high")
+    motion = motion or opts.get("motion", "still")
+    level_path = new_level(name) if import_mode != "skip" else f"/Game/VapeWars/Maps/{name}"
     if import_mode != "skip":
-        new_level(name)
         import_gltf(glb, dest)
+    else:
+        for a in actors():
+            if a.get_actor_label().startswith(("VapeRenderCam", "VapeSkyLight", "VapeBackdropFog", "VapePostProcess", "Vape_")):
+                a.destroy_actor()
+    swap_assets(folder, dest, list(library_roots))
     setup_lights(manifest, light_scale)
     boost_emissive(dest, glow)
     ambient(manifest)
@@ -292,10 +493,15 @@ def main(scene_path, render=False, light_scale=1.0, glow=3.0, exposure=0.0, res=
     except Exception as e:
         warn(f"Save level: {e}")
     if render:
-        screenshot(cam, name, res)
+        try:
+            out_dir = os.path.join(unreal.Paths.project_saved_dir(), "MovieRenders", name)
+            render_mrq(level_path, cam, name, out_dir, res, quality, motion)
+        except Exception as e:
+            warn(f"Movie Render Queue ({e}); taking a high-res screenshot instead.")
+            screenshot(cam, name, res)
     unreal.log("[vape] Summary:\n  " + "\n  ".join(LOG))
     return LOG
 
 
 if __name__ == "__main__" and len(sys.argv) > 1:
-    main(sys.argv[1], render="--render" in sys.argv)
+    main(sys.argv[1], render="--render" in sys.argv, import_mode="skip" if "--skip-import" in sys.argv else "scene")

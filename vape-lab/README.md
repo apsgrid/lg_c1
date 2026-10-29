@@ -85,6 +85,9 @@ Every district has a market share split between you, the three rival chains and 
 
 ## High-end renders (Blender / Unreal)
 
+**Studio.** The **🎬 Studio** view is for designing shots by talking: describe the visual, Claude turns it into a shot spec, the three.js preview test-runs it, and you choose where each prop's final model comes from (built-in, a Fab/Megascans asset, or a text-to-3D generation). **Approve for Unreal** packages everything, with instructions for Claude on your Unreal PC. Code: `src/studio/` (spec, prompt, package, state), `src/view/studioScene.ts`, `src/view/props.ts`, `src/ui/studio.ts`, `render/text3d/generate.py`.
+
+
 Use the browser game to try ideas, then press **🎬 Export for Blender / UE** on the Lab or Shop 3D view. It saves a zip with the scene as `.glb` (meshes, materials, textures, lights, the camera) and a render manifest. `render/blender/vape_render.py` and `render/unreal/vape_import.py` turn that into a lit, glowing render scene. See `render/README.md`.
 
 ## Layout

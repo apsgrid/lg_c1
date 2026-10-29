@@ -20,8 +20,10 @@ import { themeFor } from './src/view/districtTheme';
 import { exportScene, type ExportInput } from './src/view/exportScene';
 import { offerDownload } from './src/ui/download';
 import { toast } from './src/ui/toast';
+import { initStudio, mountStudioApprove, mountStudioAssets, mountStudioChat, mountStudioShot } from './src/ui/studio';
+import { StudioScene } from './src/view/studioScene';
 
-type ViewId = 'lab' | 'shop' | 'city';
+type ViewId = 'lab' | 'shop' | 'city' | 'studio';
 const phone = window.matchMedia('(max-width: 860px)');
 const app = document.getElementById('app')!;
 
@@ -169,6 +171,17 @@ mountCityPanel(city.left);
 city.mountTabs();
 onPlaceTapped(() => { if (phone.matches) city.select('left'); });
 
+// --- Studio view: talk ideas through, test-run them, approve for Unreal -------------------
+const studioView = makeView('studio', 'Chat', [
+  { id: 'shot', label: 'Shot', mount: (el) => mountStudioShot(el) },
+  { id: 'assets', label: 'Assets', mount: (el) => mountStudioAssets(el) },
+  { id: 'approve', label: 'Approve', mount: (el) => mountStudioApprove(el) },
+]);
+const studioScene = new StudioScene(studioView.stage, data);
+initStudio(studioScene);
+mountStudioChat(studioView.left);
+studioView.mountTabs();
+
 // --- Export for Blender / Unreal ----------------------------------------------------------
 const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'scene';
 function exportButton(stage: HTMLElement, build: () => ExportInput): void {
@@ -237,7 +250,8 @@ function setView(v: ViewId): void {
   app.dataset.view = v;
   labScene.setActive(v === 'lab');
   shopScene.setActive(v === 'shop');
-  const active = v === 'lab' ? lab : v === 'shop' ? shop : city;
+  studioScene.setActive(v === 'studio');
+  const active = v === 'lab' ? lab : v === 'shop' ? shop : v === 'city' ? city : studioView;
   active.select(active.current());
   for (const b of viewSeg.children) {
     const on = (b as HTMLElement).dataset.view === v;
@@ -251,13 +265,13 @@ function setView(v: ViewId): void {
   }
   try { localStorage.setItem('vapelab.v1.view', v); } catch { /* ignore */ }
 }
-for (const [id, label] of [['lab', 'Lab'], ['shop', 'Shop'], ['city', 'City']] as const) {
+for (const [id, label] of [['lab', 'Lab'], ['shop', 'Shop'], ['city', 'City'], ['studio', '🎬 Studio']] as const) {
   viewSeg.append(h('button', { role: 'radio', 'data-view': id, onclick: () => setView(id) }, label));
 }
 // New players start at the car boot; returning players land where they left off.
 let startView: ViewId = canMakeOwn(shopState.shop) ? 'lab' : 'shop';
 try { startView = (localStorage.getItem('vapelab.v1.view') as ViewId) || startView; } catch { /* ignore */ }
-setView(['lab', 'shop', 'city'].includes(startView) ? startView : 'shop');
+setView(['lab', 'shop', 'city', 'studio'].includes(startView) ? startView : 'shop');
 renderLabLock();
 phone.addEventListener('change', () => setView(app.dataset.view as ViewId));
 

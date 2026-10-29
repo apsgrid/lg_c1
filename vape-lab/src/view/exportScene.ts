@@ -4,7 +4,7 @@
 // The scripts in render/ read the zip and build the render scene.
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
-import { makeZip } from '../util/zip';
+import { makeZip, type ZipEntry } from '../util/zip';
 
 export interface ExportInput {
   /** File-friendly base name, e.g. "shop-beach-medium". */
@@ -19,6 +19,10 @@ export interface ExportInput {
   backdrop: [string, string];
   /** Anything else worth knowing: view, tier, district, shop name... */
   info: Record<string, unknown>;
+  /** More files for the zip (the Studio's spec, asset plan, instructions). */
+  extraFiles?: ZipEntry[];
+  /** Replaces the default README.txt. */
+  readme?: string;
 }
 
 const hex = (c: THREE.Color) => `#${c.getHexString()}`;
@@ -99,7 +103,8 @@ export async function exportScene(input: ExportInput): Promise<Uint8Array> {
     return makeZip([
       { name: 'scene.glb', data: new Uint8Array(glb) },
       { name: 'scene.render.json', data: JSON.stringify(manifest, null, 2) },
-      { name: 'README.txt', data: readme },
+      { name: 'README.txt', data: input.readme ?? readme },
+      ...(input.extraFiles ?? []),
     ]);
   } finally {
     scene.remove(cam, aim);
