@@ -81,6 +81,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 /* Tabs */
 .tabs { grid-area: tabs; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; background: var(--panel-solid); padding: 10px 0 0 12px; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); z-index: 1; }
 .tabs .tab:first-child { display: none; }
+.tabs .more-btn, .more-menu { display: none; }
 .tab { flex: none; border: none; background: transparent; border-radius: 8px 8px 0 0; padding: 8px 12px; color: var(--muted); position: relative; }
 .tab.on { color: var(--ink); background: var(--panel); box-shadow: inset 0 -2px 0 var(--accent); }
 .tab.badge::after { content: ''; position: absolute; top: 6px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
@@ -467,6 +468,12 @@ details.danger { margin-top: 24px; color: var(--muted); }
     padding-left: max(4px, env(safe-area-inset-left, 0px)); padding-right: max(4px, env(safe-area-inset-right, 0px));
   }
   .tabs .tab:first-child { display: block; }
+  .tabs { position: relative; overflow: visible; }
+  .tabs .tab.secondary { display: none; }
+  .tabs .more-btn { display: block; }
+  .more-menu:not([hidden]) { display: grid; position: absolute; right: max(8px, env(safe-area-inset-right, 0px)); bottom: calc(100% + 6px); min-width: 160px; background: var(--panel-solid); border: 1px solid var(--line); border-radius: 12px; padding: 6px; gap: 4px; box-shadow: 0 10px 30px #0009; z-index: 20; }
+  .more-menu button { text-align: left; min-height: 44px; border: none; background: transparent; }
+  .more-menu button:hover { background: #2a2638; }
   .tab { flex: 1 0 auto; min-height: 50px; padding: 0 10px; font-size: 13px; border-radius: 0; }
   .tab.on { box-shadow: inset 0 2px 0 var(--accent); background: transparent; }
   .toasts { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); width: max-content; max-width: calc(100% - 32px); }

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { shelfSlots, tierOf, type GameData, type ShopState } from '../sim';
+import { cityLoc, sellLocId, shelfSlots, tierOf, type CityLocation, type GameData, type ShopState } from '../sim';
+import { drawDistrictView, themeFor, type DistrictTheme } from './districtTheme';
 import { drawLabel } from './label';
 import { blobShadowTexture, Post } from './post';
 
@@ -147,7 +148,7 @@ export class ShopScene {
 
   // --- Environments per tier ------------------------------------------------------------
 
-  private buildEnv(tier: string, slots: number): void {
+  private buildEnv(tier: string, slots: number, theme: DistrictTheme, loc: CityLocation | undefined): void {
     this.clearPeople();
     this.scene.remove(this.env);
     disposeTree(this.env);
@@ -157,8 +158,8 @@ export class ShopScene {
     const outdoors = tier === 'car';
     const premium = tier === 'premium';
 
-    this.scene.background = new THREE.Color(outdoors ? '#1b2033' : '#14121c');
-    this.scene.fog = outdoors ? new THREE.Fog('#1b2033', 10, 24) : null;
+    this.scene.background = new THREE.Color(outdoors ? theme.sky : '#14121c');
+    this.scene.fog = outdoors ? new THREE.Fog(theme.sky, 10, 24) : null;
     g.add(new THREE.HemisphereLight(outdoors ? '#bcc8ff' : premium ? '#fff1d6' : '#d9d4ff', '#2a1f2e', outdoors ? 1.1 : 0.9));
     const key = new THREE.DirectionalLight(premium ? '#fff0d8' : '#fff4e6', outdoors ? 1.4 : 2.0);
     key.position.set(3, 7, 5);
@@ -167,9 +168,9 @@ export class ShopScene {
     Object.assign(key.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8 });
     g.add(key);
 
-    if (tier === 'car') this.buildCar(g);
+    if (tier === 'car') this.buildCar(g, theme, loc);
     else if (tier === 'garage') this.buildGarage(g);
-    else this.buildStore(g, tier, slots);
+    else this.buildStore(g, tier, slots, theme, loc);
 
     // You, behind the counter.
     this.you = this.makePerson('#ff4fa3', false, true);
@@ -182,8 +183,22 @@ export class ShopScene {
     this.controls.update();
   }
 
-  private buildCar(g: THREE.Group): void {
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), mat('#2a2c33', { roughness: 0.95 }));
+  /** A window (or backdrop) onto the district outside. */
+  private districtView(loc: CityLocation | undefined, theme: DistrictTheme, w: number, hgt: number): THREE.Mesh {
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = Math.round(512 * (hgt / w));
+    drawDistrictView(c, loc, theme);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.Mesh(new THREE.PlaneGeometry(w, hgt), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+  }
+
+  private buildCar(g: THREE.Group, theme: DistrictTheme, loc: CityLocation | undefined): void {
+    const backdrop = this.districtView(loc, theme, 16, 6);
+    backdrop.position.set(0, 3, -6);
+    g.add(backdrop);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), mat(theme.ground, { roughness: 0.95 }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     g.add(ground);
@@ -301,27 +316,34 @@ export class ShopScene {
     };
   }
 
-  private buildStore(g: THREE.Group, tier: string, slots: number): void {
+  private buildStore(g: THREE.Group, tier: string, slots: number, theme: DistrictTheme, loc: CityLocation | undefined): void {
     const premium = tier === 'premium';
     const cols = Math.ceil(slots / 2);
     const width = Math.max(8, cols * 1.7 + 4);
     const depth = 6 + (tier === 'large' || premium ? 1 : 0);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), mat(premium ? '#d9d4cc' : '#2b2735', { roughness: premium ? 0.25 : 0.8, metalness: premium ? 0.1 : 0 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), mat(premium ? '#d9d4cc' : theme.floor, { roughness: premium ? 0.25 : 0.8, metalness: premium ? 0.1 : 0 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.z = 0.5;
     floor.receiveShadow = true;
     g.add(floor);
-    const rug = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.4, 2), mat(premium ? '#5a2238' : '#3a2a4a', { roughness: 0.95 }));
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.4, 2), mat(premium ? '#5a2238' : theme.rug, { roughness: 0.95 }));
     rug.rotation.x = -Math.PI / 2;
     rug.position.set(-0.4, 0.005, 1.2);
     g.add(rug);
-    const wallMat = mat(premium ? '#2b2420' : '#221e2c', { roughness: 0.9 });
+    const wallMat = mat(premium ? '#2b2420' : theme.wall, { roughness: 0.9 });
     const back = new THREE.Mesh(new THREE.PlaneGeometry(width, 4.5), wallMat);
     back.position.set(0, 2.25, -2.5);
     const side = new THREE.Mesh(new THREE.PlaneGeometry(depth, 4.5), wallMat);
     side.rotation.y = Math.PI / 2;
     side.position.set(-width / 2, 2.25, 0.5);
     g.add(back, side);
+    // A window onto the street outside: you can see which district you're in.
+    const win = this.districtView(loc, theme, 2, 1.4);
+    win.rotation.y = Math.PI / 2;
+    win.position.set(-width / 2 + 0.05, 1.9, -1.5);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.55, 2.15), mat('#16141c', { metalness: 0.5, roughness: 0.4 }));
+    frame.position.set(-width / 2 + 0.01, 1.9, -1.5);
+    g.add(frame, win);
     if (premium) {
       const trim = mat('#d8b56a', { metalness: 0.9, roughness: 0.25 });
       const t1 = new THREE.Mesh(new THREE.BoxGeometry(width, 0.06, 0.06), trim);
@@ -337,9 +359,9 @@ export class ShopScene {
         g.add(pot, plant);
       }
     }
-    const neonA = new THREE.PointLight(premium ? '#ffd79a' : '#ff4fa3', 14, 10);
+    const neonA = new THREE.PointLight(premium ? '#ffd79a' : theme.neonA, 14, 10);
     neonA.position.set(-width / 4, 3, -1.5);
-    const neonB = new THREE.PointLight(premium ? '#ffe8c4' : '#3ad7ff', 12, 10);
+    const neonB = new THREE.PointLight(premium ? '#ffe8c4' : theme.neonB, 12, 10);
     neonB.position.set(width / 4, 3, -1.5);
     g.add(neonA, neonB);
 
@@ -422,11 +444,12 @@ export class ShopScene {
   setShop(shop: ShopState): void {
     const tier = tierOf(shop);
     const slots = shelfSlots(shop);
-    const envKey = `${tier.id}:${slots}`;
+    const locId = tier.id === 'garage' ? shop.home : sellLocId(shop);
+    const envKey = `${tier.id}:${slots}:${locId}`;
     if (envKey !== this.envKey) {
       this.envKey = envKey;
       this.decorKey = '';
-      this.buildEnv(tier.id, slots);
+      this.buildEnv(tier.id, slots, themeFor(locId), cityLoc(this.data, locId));
     }
     const decorKey = `${envKey}|${(shop.upgrades ?? []).join(',')}|${shop.name}`;
     if (decorKey !== this.decorKey) {

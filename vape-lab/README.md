@@ -67,10 +67,9 @@ Switch to **City** in the top bar for a top-down map of 11 locations: a school, 
 - **Restocking.** Stock travels from your garage or stash, via your car, to where you sell. Short trips arrive the next morning; long ones take 2 or 3 days.
 - **Heat** (0-100) is police attention. It rises with selling from a car, serving kids, drive-bys, protests and refused refunds, and cools by 4 a day. The hotter you are and the more heavily policed the area, the likelier a **bust**: stock seized, a fine, and closed for the day (a car search loses everything in the car). Moving your store cuts heat by 60%.
 - **Serving kids.** Skipping the ID check near the school lets kids buy, and word spreads so more of them turn up. Every sale adds heat and some are Trading Standards test purchases (250 cr fine). It's a gamble that loses over time: in testing, serving every kid at the school gates for 30 days ended about 2,500 cr in debt with five busts, against about 600 cr up for checking ID.
+- **Every district looks different** inside your shop: its own walls, floor, neon colours and a window onto the street outside (towers in the CBD, the sea at the beach, club signs on the Neon Mile). At the car boot, the district is the backdrop.
 - **Rival stores** sit on the map. Once you have a store they may send protesters (fewer customers that day) or firebomb it overnight (closed for repairs; a security guard makes it much rarer). Open rival stores nearby take a small slice of your trade.
 - **Drive-bys.** From the City you can drive past a rival at night and lob firebombs in a silly timing mini game. Each window hit shuts them for a day and burns some of their notes on your recipes. It adds a lot of heat, the police may pull you over (fine, closed tomorrow), and their grudge makes revenge more likely. One drive-by a night.
-
-
 
 ## The turf war
 

@@ -31,7 +31,8 @@ const top = h('header.topbar', {},
 );
 app.append(top);
 
-interface Tab { id: string; label: string; mount: (el: HTMLElement) => void }
+/** `more` tabs sit behind a "More" button on phones so the tab bar stays readable. */
+interface Tab { id: string; label: string; mount: (el: HTMLElement) => void; more?: boolean }
 
 /** One view = a 3D stage, a left panel, and a tabbed right panel. On phones the left panel is the first tab. */
 function makeView(view: ViewId, leftLabel: string, tabs: Tab[]) {
@@ -55,18 +56,31 @@ function makeView(view: ViewId, leftLabel: string, tabs: Tab[]) {
       b.classList.toggle('on', k === id);
       b.setAttribute('aria-selected', String(k === id));
     }
+    const sec = all.find((t) => t.id === id && t.more);
+    moreBtn.classList.toggle('on', !!sec);
+    moreBtn.textContent = sec ? `${sec.label} ▴` : 'More ▴';
+    moreMenu.hidden = true;
     try { localStorage.setItem(key, id); } catch { /* ignore */ }
   };
+  // Phones: secondary tabs live in a small menu above the tab bar.
+  const moreBtn = h('button.tab.more-btn', { 'aria-haspopup': 'true', onclick: () => { moreMenu.hidden = !moreMenu.hidden; } }, 'More ▴');
+  const moreMenu = h('div.more-menu', { role: 'menu', hidden: true });
+  const syncMoreBadge = () => moreBtn.classList.toggle('badge', [...buttons.entries()].some(([k, b]) => all.find((t) => t.id === k)?.more && b.classList.contains('badge')));
   const mountTabs = () => {
     for (const t of all) {
-      const btn = h('button.tab', { role: 'tab', onclick: () => select(t.id) }, t.label);
+      const btn = h('button.tab', { role: 'tab', class: t.more ? 'secondary' : '', onclick: () => select(t.id) }, t.label);
       const body = h('section.tab-body', { role: 'tabpanel' });
       t.mount(body);
       tabBar.append(btn);
       right.append(body);
       bodies.set(t.id, body);
       buttons.set(t.id, btn);
+      if (t.more) {
+        moreMenu.append(h('button', { role: 'menuitem', onclick: () => { select(t.id); btn.classList.remove('badge'); syncMoreBadge(); } }, t.label));
+        new MutationObserver(syncMoreBadge).observe(btn, { attributes: true, attributeFilter: ['class'] });
+      }
     }
+    if (all.some((t) => t.more)) tabBar.append(moreBtn, moreMenu);
     let initial = phone.matches ? 'left' : tabs[0].id;
     try { initial = localStorage.getItem(key) || initial; } catch { /* ignore */ }
     select(bodies.has(initial) ? initial : tabs[0].id);
@@ -80,9 +94,9 @@ const lab = makeView('lab', 'Mix', [
   { id: 'brand', label: 'Brand', mount: (el) => mountBranding(el) },
   { id: 'test', label: 'Test', mount: (el) => mountTesting(el, labScene) },
   { id: 'orders', label: 'Orders', mount: (el) => mountOrders(el, () => lab.buttons.get('orders')?.classList.add('badge')) },
-  { id: 'journal', label: 'Journal', mount: (el) => mountJournal(el) },
-  { id: 'library', label: 'Library', mount: (el) => mountLibrary(el) },
-  { id: 'auto', label: 'Auto', mount: (el) => mountAuto(el) },
+  { id: 'journal', label: 'Journal', mount: (el) => mountJournal(el), more: true },
+  { id: 'library', label: 'Library', mount: (el) => mountLibrary(el), more: true },
+  { id: 'auto', label: 'Auto', mount: (el) => mountAuto(el), more: true },
 ]);
 const labScene = new LabScene(lab.stage, data);
 mountFormula(lab.left, labScene);
