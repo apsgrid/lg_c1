@@ -7,6 +7,7 @@ import { onShop, shopAction, shopState } from '../shopState';
 import { data } from '../state';
 import { bar, clear, h } from './dom';
 import { openDriveBy } from './driveby';
+import { themeFor } from '../view/districtTheme';
 import { toast } from './toast';
 
 let selected = 'suburbs';
@@ -43,6 +44,8 @@ export function mountCityMap(stage: HTMLElement): void {
   stage.append(canvas);
   let hover: string | null = null;
   const t0 = performance.now();
+  let base: HTMLCanvasElement | null = null;
+  let baseKey = '';
 
   const layout = () => {
     const w = stage.clientWidth || 1, hh = stage.clientHeight || 1;
@@ -95,26 +98,23 @@ export function mountCityMap(stage: HTMLElement): void {
     const k = Math.max(0.6, Math.min(1, Math.min(L.sx, L.sy) / 560));
     const P = (x: number, y: number) => toPx(L, x, y);
 
-    // Ground, water and parks.
-    ctx.fillStyle = '#171a28';
-    ctx.fillRect(0, 0, L.w, L.h);
-    ctx.fillStyle = '#1e2234';
-    roundRect(ctx, L.ox - 10, L.oy - 10, L.sx + 20, L.sy + 20, 18);
-    ctx.fill();
-    ctx.fillStyle = '#16314a';
-    ctx.beginPath();
-    const [wx, wy] = P(72, 100);
-    ctx.moveTo(wx, wy + 10);
-    ctx.quadraticCurveTo(...P(80, 74), ...P(104, 70));
-    ctx.lineTo(...P(104, 104));
-    ctx.closePath();
-    ctx.fill();
-    for (const [x, y, w, hh] of [[26, 32, 10, 8], [62, 56, 9, 7], [8, 64, 8, 9]]) {
-      const [px, py] = P(x, y);
-      ctx.fillStyle = '#1d3326';
-      roundRect(ctx, px, py, (w / 100) * L.sx, (hh / 100) * L.sy, 8);
-      ctx.fill();
+    // Ground, blocks, parks and water (cached), then a shimmer on the harbour.
+    const key = `${L.w}x${L.h}@${dpr}`;
+    if (key !== baseKey) {
+      base = paintCityBase(L.w, L.h, dpr, L.ox, L.oy, L.sx, L.sy);
+      baseKey = key;
     }
+    ctx.drawImage(base!, 0, 0, L.w, L.h);
+    ctx.save();
+    waterPath(ctx, P);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(160,210,255,0.18)';
+    ctx.lineWidth = 1.2;
+    for (let k = 0; k < 9; k++) {
+      const [ax, ay] = P(70 + ((k * 37) % 30) + Math.sin(t * 0.6 + k) * 2, 78 + k * 2.6);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + 18 + (k % 3) * 8, ay); ctx.stroke();
+    }
+    ctx.restore();
     // Streets.
     ctx.strokeStyle = '#2b3048';
     ctx.lineWidth = 6;
@@ -133,6 +133,25 @@ export function mountCityMap(stage: HTMLElement): void {
     ctx.beginPath(); ctx.moveTo(...P(2, 44)); ctx.lineTo(...P(98, 44)); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(...P(50, 2)); ctx.lineTo(...P(50, 98)); ctx.stroke();
     ctx.setLineDash([]);
+    // Night traffic: headlights and tail lights moving along the streets.
+    for (let k = 0; k < 16; k++) {
+      const vertical = k % 2 === 0;
+      const lane = [8, 22, 36, 50, 64, 78, 92, 44][k % 8];
+      const dir = k % 4 < 2 ? 1 : -1;
+      const pos = ((t * (5 + (k % 5) * 1.5) + k * 23) % 96) + 2;
+      const along = dir > 0 ? pos : 100 - pos;
+      const off = dir * 0.6;
+      const [cx, cy] = vertical ? P(lane + off, along) : P(along, lane + off);
+      if (vertical && lane === 44) continue;
+      const [dx, dy] = vertical ? [0, dir] : [dir, 0];
+      ctx.fillStyle = '#ff3344aa';
+      ctx.fillRect(cx - dx * 3 - 1, cy - dy * 3 - 1, 2, 2);
+      ctx.fillStyle = '#fff3c4';
+      ctx.shadowColor = '#fff3c4';
+      ctx.shadowBlur = 6;
+      ctx.fillRect(cx + dx * 2 - 1, cy + dy * 2 - 1, 2.2, 2.2);
+      ctx.shadowBlur = 0;
+    }
 
     // Heat glow around where you sell.
     const sell = cityLoc(data, sellLocId(s));
@@ -164,10 +183,16 @@ export function mountCityMap(stage: HTMLElement): void {
       const [px, py] = P(loc.x, loc.y);
       const isSel = loc.id === selected;
       const isHover = loc.id === hover;
-      ctx.fillStyle = isSel ? '#3a2a4a' : '#262a3e';
+      ctx.fillStyle = isSel ? '#3a2a4a' : mixHex(themeFor(loc.id).neonA, '#1e2032', 0.8);
       ctx.strokeStyle = isSel ? '#ff4fa3' : isHover ? '#a39fbb' : '#3a4060';
       ctx.lineWidth = isSel ? 3 : 1.5;
-      ctx.beginPath(); ctx.arc(px, py, 20 * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 3;
+      ctx.beginPath(); ctx.arc(px, py, 20 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.stroke();
       // Market-share ring: who owns this district.
       const shares = turf[loc.id] ?? {};
       let a0 = -Math.PI / 2;
@@ -196,7 +221,12 @@ export function mountCityMap(stage: HTMLElement): void {
       ctx.font = `600 ${Math.max(9, Math.round(11 * k))}px system-ui, sans-serif`;
       ctx.fillStyle = isSel ? '#ffd1ea' : '#cfcbe0';
       // On small maps only the selected place gets its full name.
-      ctx.fillText(k < 0.8 && !isSel ? loc.type.split(' ')[0] : loc.name, px, py + 38 * k);
+      const label = k < 0.8 && !isSel ? loc.type.split(' ')[0] : loc.name;
+      ctx.lineWidth = 3.5;
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#100f18';
+      ctx.strokeText(label, px, py + 38 * k);
+      ctx.fillText(label, px, py + 38 * k);
       // Police presence dots.
       const dots = Math.round(loc.police * 4);
       for (let i = 0; i < dots; i++) {
@@ -253,13 +283,135 @@ export function mountCityMap(stage: HTMLElement): void {
     ctx.font = '700 13px system-ui, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
+    const banner = s.wonDay ? '👑 You run the city' : `Districts you lead: ${led} / ${WIN_DISTRICTS}`;
+    ctx.fillStyle = 'rgba(16,15,24,0.82)';
+    roundRect(ctx, L.ox - 2, L.oy - 2, ctx.measureText(banner).width + 18, 24, 8);
+    ctx.fill();
     ctx.fillStyle = s.wonDay ? '#ffd96a' : '#e9e6f2';
-    ctx.fillText(s.wonDay ? '👑 You run the city' : `Districts you lead: ${led} / ${WIN_DISTRICTS}`, L.ox + 6, L.oy + 6);
+    ctx.fillText(banner, L.ox + 7, L.oy + 4);
     marker(s.car, '🚗', 0, 22 + Math.sin(t * 3) * 1.5, '#5ad7ff');
 
     requestAnimationFrame(draw);
   };
   requestAnimationFrame(draw);
+}
+
+const PARKS: Array<[number, number, number, number]> = [[26, 32, 10, 8], [62, 56, 9, 7], [8, 64, 8, 9]];
+
+function waterPath(ctx: CanvasRenderingContext2D, P: (x: number, y: number) => readonly [number, number]): void {
+  ctx.beginPath();
+  const [wx, wy] = P(72, 100);
+  ctx.moveTo(wx, wy + 10);
+  ctx.quadraticCurveTo(...P(80, 74), ...P(104, 70));
+  ctx.lineTo(...P(104, 104));
+  ctx.closePath();
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1, 7), 16), pb = parseInt(b.slice(1, 7), 16);
+  const ch = [16, 8, 0].map((sh) => Math.round(((pa >> sh) & 255) * (1 - t) + ((pb >> sh) & 255) * t));
+  return `rgb(${ch[0]},${ch[1]},${ch[2]})`;
+}
+
+/**
+ * The static part of the map (ground, district glows, city blocks with little
+ * buildings, parks, water), painted once per size into an offscreen canvas.
+ */
+function paintCityBase(w: number, hh: number, dpr: number, ox: number, oy: number, sx: number, sy: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * dpr);
+  c.height = Math.round(hh * dpr);
+  const ctx = c.getContext('2d')!;
+  ctx.scale(dpr, dpr);
+  const P = (x: number, y: number) => [ox + (x / 100) * sx, oy + (y / 100) * sy] as const;
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  ctx.fillStyle = '#100f18';
+  ctx.fillRect(0, 0, w, hh);
+  ctx.fillStyle = '#1a1c2a';
+  roundRect(ctx, ox - 10, oy - 10, sx + 20, sy + 20, 18);
+  ctx.fill();
+  ctx.save();
+  roundRect(ctx, ox - 10, oy - 10, sx + 20, sy + 20, 18);
+  ctx.clip();
+  // Each district glows in its own colour.
+  const locs = data.city ?? [];
+  for (const loc of locs) {
+    const [px, py] = P(loc.x, loc.y);
+    const r = Math.min(sx, sy) * 0.2;
+    const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, `${themeFor(loc.id).neonA}2a`);
+    g.addColorStop(1, `${themeFor(loc.id).neonA}00`);
+    ctx.fillStyle = g;
+    ctx.fillRect(px - r, py - r, r * 2, r * 2);
+  }
+  // Water.
+  waterPath(ctx, P);
+  const wg = ctx.createLinearGradient(...P(80, 74), ...P(100, 100));
+  wg.addColorStop(0, '#173a5c');
+  wg.addColorStop(1, '#0c2236');
+  ctx.fillStyle = wg;
+  ctx.fill();
+  ctx.strokeStyle = '#d9c99a55';
+  ctx.lineWidth = 3;
+  waterPath(ctx, P);
+  ctx.stroke();
+  const inWater = (x: number, y: number) => { waterPath(ctx, P); const [px, py] = P(x, y); return ctx.isPointInPath(px * dpr, py * dpr); };
+  const inPark = (x: number, y: number) => PARKS.some(([px, py, pw, ph]) => x > px - 2 && x < px + pw + 2 && y > py - 2 && y < py + ph + 2);
+  const nearest = (x: number, y: number) => locs.reduce((best, l) => (Math.hypot(l.x - x, l.y - y) < Math.hypot(best.x - x, best.y - y) ? l : best), locs[0]);
+  // City blocks between the streets, filled with little buildings.
+  const lines = [2, 8, 22, 36, 50, 64, 78, 92, 98];
+  for (let i = 0; i < lines.length - 1; i++) for (let j = 0; j < lines.length - 1; j++) {
+    const x0 = lines[i] + 1.6, x1 = lines[i + 1] - 1.6, y0 = lines[j] + 1.6, y1 = lines[j + 1] - 1.6;
+    if (x1 - x0 < 2 || y1 - y0 < 2) continue;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    if (inWater(cx, cy) || inWater(x0, y1) || inWater(x1, y1)) continue;
+    if (inPark(cx, cy)) continue;
+    const [bx0, by0] = P(x0, y0), [bx1, by1] = P(x1, y1);
+    ctx.fillStyle = '#23263a';
+    roundRect(ctx, bx0, by0, bx1 - bx0, by1 - by0, 4);
+    ctx.fill();
+    const near = nearest(cx, cy);
+    const tint = themeFor(near?.id).wall;
+    const cols = (bx1 - bx0) > 50 ? 3 : 2, rows = (by1 - by0) > 50 ? 3 : 2;
+    const cw = (bx1 - bx0 - 4) / cols, ch = (by1 - by0 - 4) / rows;
+    for (let a = 0; a < cols; a++) for (let b = 0; b < rows; b++) {
+      if (rnd() < 0.12) continue;
+      const fx = bx0 + 2 + a * cw + 1.5, fy = by0 + 2 + b * ch + 1.5, fw = cw - 3, fh = ch - 3;
+      const tall = 2 + rnd() * Math.min(10, fh * 0.6);
+      const roof = mixHex(tint, '#2a2d44', 0.45 + rnd() * 0.25);
+      // South wall (with a few lit windows), then the roof lifted by its height.
+      ctx.fillStyle = mixHex(tint, '#0c0b14', 0.6);
+      ctx.fillRect(fx, fy + fh - tall, fw, tall);
+      ctx.fillStyle = '#ffd27a';
+      for (let wx = fx + 2; wx < fx + fw - 2; wx += 4) if (rnd() < 0.35 && tall > 4) { ctx.globalAlpha = 0.4 + rnd() * 0.5; ctx.fillRect(wx, fy + fh - tall + 1.5 + rnd() * (tall - 4), 1.6, 1.6); }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = roof;
+      ctx.fillRect(fx, fy - tall, fw, fh);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(fx, fy - tall, fw, 1.5);
+    }
+  }
+  // Parks with trees.
+  for (const [x, y, pw, ph] of PARKS) {
+    const [px, py] = P(x, y);
+    const w2 = (pw / 100) * sx, h2 = (ph / 100) * sy;
+    ctx.fillStyle = '#1b3524';
+    roundRect(ctx, px, py, w2, h2, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#2a4a34';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    for (let k = 0; k < Math.round((w2 * h2) / 260); k++) {
+      const tx = px + 6 + rnd() * (w2 - 12), ty = py + 6 + rnd() * (h2 - 12), r = 3 + rnd() * 3;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath(); ctx.arc(tx + 1.5, ty + 1.5, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rnd() < 0.5 ? '#2f6b3a' : '#3a7a44';
+      ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+  return c;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {

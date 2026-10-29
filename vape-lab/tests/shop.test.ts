@@ -457,6 +457,15 @@ describe('the city', () => {
     expect(miss.shop.rivals.find((x) => x.id === 'mist_co')!.closedUntil).toBe(0);
   });
 
+  it('hitting the wrong buildings on a drive-by adds heat', async () => {
+    const { driveBy } = await import('../src/sim');
+    const s: ShopState = { ...stocked(2, 5000), heat: 0 };
+    const clean = driveBy(s, 'mist_co', 2, data);
+    const messy = driveBy(s, 'mist_co', 2, data, 2);
+    expect(messy.shop.heat - clean.shop.heat).toBeGreaterThanOrEqual(7);
+    expect(messy.text).toMatch(/wrong buildings/);
+  });
+
   it('rivals attack a store eventually, harder if you hold a grudge match', () => {
     const attacks = (grudge: number) => {
       let n = 0;

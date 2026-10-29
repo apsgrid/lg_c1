@@ -372,9 +372,15 @@ input[type='color'] { width: 40px; height: 32px; padding: 0; border: 1px solid v
 
 /* Drive-by */
 .driveby { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(10, 8, 16, 0.92); padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
-.driveby-card { width: min(680px, 100%); background: var(--panel-solid); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: grid; gap: 10px; }
+.driveby-card { width: min(540px, 100%); background: var(--panel-solid); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: grid; gap: 10px; box-shadow: 0 30px 80px #000a; }
 .driveby-title { display: flex; align-items: center; justify-content: space-between; }
-.driveby-canvas { width: 100%; height: auto; aspect-ratio: 640 / 300; border-radius: 10px; display: block; touch-action: manipulation; cursor: crosshair; }
+.driveby-canvas { height: min(calc(100dvh - 190px), calc((min(540px, 100vw) - 56px) * 1.25)); width: auto; aspect-ratio: 480 / 600; max-width: 100%; margin: 0 auto; border-radius: 10px; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
+.driveby-controls { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 8px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.driveby-controls button { min-height: 52px; font-size: 20px; }
+.driveby-controls .steer { background: #2a2638; font-weight: 800; }
+.driveby-controls .steer:active { background: #3a3550; }
+.driveby-tally { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; color: var(--muted); }
+.driveby-tally b { color: var(--ink); font-size: 18px; }
 .driveby-status { font-size: 13px; color: var(--muted); text-align: center; }
 .driveby-result { display: grid; gap: 8px; justify-items: center; text-align: center; padding: 10px; }
 .driveby-result h2 { margin: 0; }
@@ -432,6 +438,35 @@ details.danger { margin-top: 24px; color: var(--muted); }
 
 @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes pop { 0% { transform: scale(0.92); opacity: 0; } 60% { transform: scale(1.03); opacity: 1; } 100% { transform: scale(1); } }
+
+/* --- Look & feel polish ------------------------------------------------------------- */
+:root { --display: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif; --card: #211e2e; --card-hi: rgba(255, 255, 255, 0.045); }
+html, body { background: radial-gradient(1200px 600px at 20% -10%, #2a1a3a 0%, transparent 60%), radial-gradient(900px 500px at 110% 110%, #10283a 0%, transparent 60%), var(--bg); }
+.topbar { background: linear-gradient(180deg, #221d30, #1a1724); box-shadow: 0 1px 0 rgba(255, 79, 163, 0.18), 0 8px 24px rgba(0, 0, 0, 0.35); }
+.brand-mark b { font-family: var(--display); font-weight: 700; font-size: 19px; letter-spacing: 0.01em; background: linear-gradient(90deg, #ffd1ea, #ff4fa3 45%, #3ad7ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.logo-dot { box-shadow: 0 0 12px rgba(255, 79, 163, 0.7); animation: logoSpin 8s linear infinite; }
+@keyframes logoSpin { to { transform: rotate(360deg); } }
+.panel { background: linear-gradient(180deg, rgba(30, 27, 42, 0.96), rgba(22, 20, 32, 0.96)); }
+.tabs { background: linear-gradient(180deg, #1f1b2c, #1c1926); }
+.tab { transition: color 0.15s, background 0.15s; }
+.tab:hover { color: var(--ink); }
+.tab.on { box-shadow: inset 0 -2px 0 var(--accent), 0 -6px 16px -10px var(--accent); }
+h3 { display: flex; align-items: center; gap: 8px; }
+h3::before { content: ''; width: 3px; height: 12px; border-radius: 2px; background: linear-gradient(var(--accent), var(--accent-2)); }
+h2 { font-family: var(--display); font-weight: 600; letter-spacing: 0.01em; }
+button { transition: transform 0.12s ease, box-shadow 0.18s ease, border-color 0.15s, background 0.15s; }
+button:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+.primary { box-shadow: 0 4px 16px -6px rgba(255, 79, 163, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25); font-family: var(--display); letter-spacing: 0.01em; }
+.primary:hover:not(:disabled) { box-shadow: 0 6px 22px -6px rgba(255, 79, 163, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.3); transform: translateY(-1px); }
+.seg { background: rgba(0, 0, 0, 0.2); }
+.seg button.on { background: linear-gradient(135deg, var(--accent), #c04fff); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+.cash-chip, .heat-chip { box-shadow: inset 0 1px 0 var(--card-hi); }
+.slot, .dial, .stat, .card, .jentry, .lib-row, .econ, .assist { box-shadow: inset 0 1px 0 var(--card-hi), 0 6px 18px -12px rgba(0, 0, 0, 0.8); }
+.score { font-family: var(--display); }
+.driveby-title b, .driveby-result h2 { font-family: var(--display); font-size: 18px; }
+.driveby-result h2 { font-size: 26px; }
+.panel { scrollbar-width: thin; scrollbar-color: #3a3550 transparent; }
+.stage { background: radial-gradient(80% 70% at 50% 40%, #1d1a2a, #0e0d15); }
 
 @media (max-width: 1100px) and (min-width: 861px) {
   #app { grid-template-columns: 300px 1fr 360px; }
@@ -500,3 +535,4 @@ details.danger { margin-top: 24px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+@media (pointer: coarse) { .driveby-status { display: none; } }

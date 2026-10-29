@@ -333,15 +333,16 @@ export interface DriveByResult {
  * The drive-by: lob firebombs at a rival's shop after closing. Hits (0-3, from
  * the mini game) shut them for that many days and burn some of their notes on
  * you. Raises heat a lot, may get you arrested, and they'll want revenge.
+ * `collateral` counts the wrong buildings hit on the way: each adds heat.
  */
-export function driveBy(shop: ShopState, rivalId: string, hits: number, data: GameData): DriveByResult {
+export function driveBy(shop: ShopState, rivalId: string, hits: number, data: GameData, collateral = 0): DriveByResult {
   const rival = shop.rivals.find((r) => r.id === rivalId);
   if (!rival || shop.lastDriveByDay === shop.day || rival.closedUntil >= shop.day) return { shop, caught: false, text: 'Not tonight.' };
   const s = clone(shop);
   const r = s.rivals.find((x) => x.id === rivalId)!;
   const rng = mulberry32(deriveSeed(s.seed, `driveby:${s.day}:${rivalId}:${hits}`));
   s.lastDriveByDay = s.day;
-  s.heat = clamp(s.heat + 18 + (3 - hits) * 4);
+  s.heat = clamp(s.heat + 18 + (3 - hits) * 4 + collateral * 4);
   r.grudge += 1;
   let text: string;
   if (hits > 0) {
@@ -349,6 +350,7 @@ export function driveBy(shop: ShopState, rivalId: string, hits: number, data: Ga
     for (const k of Object.keys(r.knowledge)) r.knowledge[k] = round1(r.knowledge[k] * (1 - 0.2 * hits));
     text = `${r.name} is shut for ${hits} day${hits === 1 ? '' : 's'}, and some of their notes on you went up in smoke.`;
   } else text = `You missed ${r.name} completely. They saw your car though.`;
+  if (collateral > 0) text += ` You also hit ${collateral === 1 ? 'the wrong building' : `${collateral} wrong buildings`}, and the neighbours called it in.`;
   const caught = rng() < (cityLoc(data, r.loc)?.police ?? 0.5) * 0.3 * (1 + s.heat / 100);
   if (caught) {
     s.cash = round2(s.cash - ARREST_FINE);

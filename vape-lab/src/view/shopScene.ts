@@ -88,6 +88,71 @@ function disposeTree(o: THREE.Object3D): void {
 
 const mat = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
 
+function canvasTex(w: number, hgt: number, paint: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = hgt;
+  paint(c.getContext('2d')!);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** A soft glow behind the diorama, tinted by the district. */
+function backdropTexture(tint: string): THREE.CanvasTexture {
+  return canvasTex(512, 512, (ctx) => {
+    const g = ctx.createRadialGradient(256, 200, 20, 256, 260, 380);
+    g.addColorStop(0, tint);
+    g.addColorStop(0.55, '#15131f');
+    g.addColorStop(1, '#09080f');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 512, 512);
+  });
+}
+
+/** Floor tiles (or boards) with a little variation, so floors aren't flat colour. */
+function floorTexture(base: string, boards: boolean): THREE.CanvasTexture {
+  const tex = canvasTex(256, 256, (ctx) => {
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, 256, 256);
+    const n = boards ? 4 : 2;
+    const size = 256 / n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < (boards ? 1 : n); j++) {
+      const v = ((i * 7 + j * 13) % 5) / 5 - 0.4;
+      ctx.fillStyle = v > 0 ? `rgba(255,255,255,${v * 0.06})` : `rgba(0,0,0,${-v * 0.12})`;
+      if (boards) ctx.fillRect(i * size, 0, size, 256);
+      else ctx.fillRect(i * size, j * size, size, size);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i <= n; i++) {
+      ctx.beginPath(); ctx.moveTo(i * size, 0); ctx.lineTo(i * size, 256); ctx.stroke();
+      if (!boards) { ctx.beginPath(); ctx.moveTo(0, i * size); ctx.lineTo(256, i * size); ctx.stroke(); }
+    }
+    if (boards) for (let i = 0; i < n; i++) { ctx.beginPath(); ctx.moveTo(i * size, (i * 97) % 256); ctx.lineTo((i + 1) * size, (i * 97) % 256); ctx.stroke(); }
+  });
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+function posterTexture(lines: string[], bg: string, fg: string, accent: string): THREE.CanvasTexture {
+  return canvasTex(256, 360, (ctx) => {
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 256, 360);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 8;
+    ctx.strokeRect(10, 10, 236, 340);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = accent;
+    ctx.font = '900 78px system-ui, sans-serif';
+    ctx.fillText(lines[0], 128, 120);
+    ctx.fillStyle = fg;
+    ctx.font = '800 30px system-ui, sans-serif';
+    lines.slice(1).forEach((ln, i) => ctx.fillText(ln, 128, 220 + i * 40));
+  });
+}
+
 export class ShopScene {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -158,7 +223,8 @@ export class ShopScene {
     const outdoors = tier === 'car';
     const premium = tier === 'premium';
 
-    this.scene.background = new THREE.Color(outdoors ? theme.sky : '#14121c');
+    if (this.scene.background instanceof THREE.Texture) this.scene.background.dispose();
+    this.scene.background = outdoors ? new THREE.Color(theme.sky) : backdropTexture(tier === 'garage' ? '#3a3040' : theme.sky);
     this.scene.fog = outdoors ? new THREE.Fog(theme.sky, 10, 24) : null;
     g.add(new THREE.HemisphereLight(outdoors ? '#bcc8ff' : premium ? '#fff1d6' : '#d9d4ff', '#2a1f2e', outdoors ? 1.1 : 0.9));
     const key = new THREE.DirectionalLight(premium ? '#fff0d8' : '#fff4e6', outdoors ? 1.4 : 2.0);
@@ -321,22 +387,85 @@ export class ShopScene {
     const cols = Math.ceil(slots / 2);
     const width = Math.max(8, cols * 1.7 + 4);
     const depth = 6 + (tier === 'large' || premium ? 1 : 0);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), mat(premium ? '#d9d4cc' : theme.floor, { roughness: premium ? 0.25 : 0.8, metalness: premium ? 0.1 : 0 }));
+    const floorTex = floorTexture(premium ? '#d9d4cc' : theme.floor, !premium && ['market', 'uni', 'church', 'suburbs', 'school'].includes(loc?.id ?? ''));
+    floorTex.repeat.set(width / 2, depth / 2);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), mat('#ffffff', { map: floorTex, roughness: premium ? 0.25 : 0.75, metalness: premium ? 0.1 : 0 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.z = 0.5;
     floor.receiveShadow = true;
     g.add(floor);
+    // The diorama: the shop and a strip of pavement on a plinth, with a neon edge.
+    const outW = 3.2;
+    const baseW = width + outW + 0.4;
+    const baseX = (-width / 2 - outW + width / 2 + 0.2) / 2;
+    const plinth = new THREE.Mesh(new RoundedBoxGeometry(baseW, 0.5, depth + 0.6, 2, 0.06), mat('#1b1826', { roughness: 0.7 }));
+    plinth.position.set(baseX, -0.26, 0.5);
+    plinth.receiveShadow = true;
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(baseW, 0.04, 0.04), new THREE.MeshStandardMaterial({ color: theme.neonA, emissive: theme.neonA, emissiveIntensity: 0.7 }));
+    edge.position.set(baseX, -0.12, 0.5 + (depth + 0.6) / 2 + 0.01);
+    const pave = new THREE.Mesh(new THREE.PlaneGeometry(outW, depth + 0.4), mat('#4a4854', { roughness: 0.9 }));
+    pave.rotation.x = -Math.PI / 2;
+    pave.position.set(-width / 2 - outW / 2, 0.002, 0.5);
+    pave.receiveShadow = true;
+    const kerb = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, depth + 0.4), mat('#6a6874'));
+    kerb.position.set(-width / 2 - outW + 0.09, 0.05, 0.5);
+    g.add(plinth, edge, pave, kerb);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 3.6, 8), mat('#3a3844', { metalness: 0.6 }));
+    pole.position.set(-width / 2 - outW + 0.5, 1.8, -1.6);
+    const lampHead = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshStandardMaterial({ color: '#ffe6b0', emissive: '#ffcf8a', emissiveIntensity: 2.5 }));
+    lampHead.position.set(-width / 2 - outW + 0.5, 3.65, -1.6);
+    const streetLight = new THREE.PointLight('#ffcf8a', 8, 6);
+    streetLight.position.set(-width / 2 - outW + 0.7, 3.3, -1.2);
+    g.add(pole, lampHead, streetLight);
     const rug = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.4, 2), mat(premium ? '#5a2238' : theme.rug, { roughness: 0.95 }));
     rug.rotation.x = -Math.PI / 2;
     rug.position.set(-0.4, 0.005, 1.2);
     g.add(rug);
     const wallMat = mat(premium ? '#2b2420' : theme.wall, { roughness: 0.9 });
-    const back = new THREE.Mesh(new THREE.PlaneGeometry(width, 4.5), wallMat);
-    back.position.set(0, 2.25, -2.5);
-    const side = new THREE.Mesh(new THREE.PlaneGeometry(depth, 4.5), wallMat);
-    side.rotation.y = Math.PI / 2;
-    side.position.set(-width / 2, 2.25, 0.5);
-    g.add(back, side);
+    // Walls with real thickness, so the cutaway reads like a model.
+    const back = new THREE.Mesh(new THREE.BoxGeometry(width + 0.2, 4.5, 0.2), wallMat);
+    back.position.set(0.1 - 0.2, 2.25, -2.6);
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.5, depth + 0.2), wallMat);
+    side.position.set(-width / 2 - 0.1, 2.25, 0.4);
+    back.receiveShadow = side.receiveShadow = true;
+    const capMat = mat(premium ? '#d8b56a' : '#6a6478', { roughness: 0.7, metalness: premium ? 0.8 : 0 });
+    const capBack = new THREE.Mesh(new THREE.BoxGeometry(width + 0.24, 0.06, 0.24), capMat);
+    capBack.position.set(-0.1, 4.53, -2.6);
+    const capSide = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, depth + 0.24), capMat);
+    capSide.position.set(-width / 2 - 0.1, 4.53, 0.4);
+    const skirt = mat(`#${new THREE.Color(theme.wall).multiplyScalar(0.6).getHexString()}`);
+    const skirtBack = new THREE.Mesh(new THREE.BoxGeometry(width, 0.16, 0.04), skirt);
+    skirtBack.position.set(0, 0.08, -2.48);
+    const skirtSide = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, depth), skirt);
+    skirtSide.position.set(-width / 2 + 0.02, 0.08, 0.5);
+    g.add(back, side, capBack, capSide, skirtBack, skirtSide);
+    // Pendant lamps over the floor.
+    for (const x of [-width / 4, 0.1 * width, width / 4 + 0.6]) {
+      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.9, 4), mat('#111'));
+      cord.position.set(x, 4.05, 0.3);
+      const shadeM = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.26, 20, 1, true), mat(premium ? '#d8b56a' : '#1d1b22', { side: THREE.DoubleSide, metalness: 0.5, roughness: 0.4 }));
+      shadeM.position.set(x, 3.5, 0.3);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), new THREE.MeshStandardMaterial({ color: '#fff3d6', emissive: '#ffd9a0', emissiveIntensity: 3 }));
+      bulb.position.set(x, 3.38, 0.3);
+      g.add(cord, shadeM, bulb);
+    }
+    const pendant = new THREE.PointLight('#ffd9a0', 10, 9);
+    pendant.position.set(0, 3.2, 0.5);
+    g.add(pendant);
+    // Posters: the house rules, and something new in.
+    const poster18 = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.87), new THREE.MeshStandardMaterial({ map: posterTexture(['18+', 'ONLY', 'ID checked'], '#1a1824', '#ece9f6', '#ff5a6a'), roughness: 0.6 }));
+    poster18.position.set(width / 2 - 0.55, 2.3, -2.48);
+    const posterNew = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.87), new THREE.MeshStandardMaterial({ map: posterTexture(['NEW', 'flavours', 'in store'], '#1a1824', '#ece9f6', theme.neonB), roughness: 0.6 }));
+    posterNew.position.set(width / 2 - 1.3, 2.3, -2.48);
+    g.add(poster18, posterNew);
+    if (!premium) {
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.17, 0.45, 16), mat('#c9805a', { roughness: 0.8 }));
+      pot.position.set(width / 2 - 0.4, 0.22, 3.0);
+      const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 1), mat('#2f6b3a', { roughness: 0.8, flatShading: true }));
+      leaves.position.set(width / 2 - 0.4, 0.8, 3.0);
+      leaves.castShadow = true;
+      g.add(pot, leaves);
+    }
     // A window onto the street outside: you can see which district you're in.
     const win = this.districtView(loc, theme, 2, 1.4);
     win.rotation.y = Math.PI / 2;

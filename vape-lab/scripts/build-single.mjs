@@ -12,6 +12,9 @@ const safe = (s) => s.replace(/<\/(script|style)/gi, '<\\/$1');
 const page = `<title>Vape Lab</title>
 <meta name="description" content="Vape Wars: Vape Lab demo. A fictional flavour-design minigame.">
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
 <style>${safe(css.join('\n'))}</style>
 <div id="app"></div>
 <script type="module">${safe(js.join('\n'))}</script>
