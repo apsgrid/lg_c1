@@ -224,8 +224,8 @@ export class ShopScene {
     const premium = tier === 'premium';
 
     if (this.scene.background instanceof THREE.Texture) this.scene.background.dispose();
-    this.scene.background = outdoors ? new THREE.Color(theme.sky) : backdropTexture(tier === 'garage' ? '#3a3040' : theme.sky);
-    this.scene.fog = outdoors ? new THREE.Fog(theme.sky, 10, 24) : null;
+    this.scene.background = backdropTexture(tier === 'garage' ? '#3a3040' : theme.sky);
+    this.scene.fog = null;
     g.add(new THREE.HemisphereLight(outdoors ? '#bcc8ff' : premium ? '#fff1d6' : '#d9d4ff', '#2a1f2e', outdoors ? 1.1 : 0.9));
     const key = new THREE.DirectionalLight(premium ? '#fff0d8' : '#fff4e6', outdoors ? 1.4 : 2.0);
     key.position.set(3, 7, 5);
@@ -264,10 +264,22 @@ export class ShopScene {
     const backdrop = this.districtView(loc, theme, 16, 6);
     backdrop.position.set(0, 3, -6);
     g.add(backdrop);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), mat(theme.ground, { roughness: 0.95 }));
+    // A diorama: a slab of street (road, kerb, pavement) on a plinth with a neon edge.
+    const plinth = new THREE.Mesh(new RoundedBoxGeometry(13.5, 0.5, 11, 2, 0.06), mat('#1b1826', { roughness: 0.7 }));
+    plinth.position.set(-0.75, -0.26, 0);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(13.3, 10.8), mat(theme.ground, { roughness: 0.95 }));
     ground.rotation.x = -Math.PI / 2;
+    ground.position.set(-0.75, 0.001, 0);
     ground.receiveShadow = true;
-    g.add(ground);
+    const pave = new THREE.Mesh(new THREE.PlaneGeometry(13.3, 2.2), mat('#34323d', { roughness: 0.95 }));
+    pave.rotation.x = -Math.PI / 2;
+    pave.position.set(-0.75, 0.004, 4.3);
+    pave.receiveShadow = true;
+    const kerb = new THREE.Mesh(new THREE.BoxGeometry(13.3, 0.1, 0.16), mat('#6a6874'));
+    kerb.position.set(-0.75, 0.05, 3.2);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.04, 0.04), new THREE.MeshStandardMaterial({ color: theme.neonA, emissive: theme.neonA, emissiveIntensity: 0.7 }));
+    edge.position.set(-0.75, -0.12, 5.52);
+    g.add(plinth, ground, pave, kerb, edge);
     for (const x of [-3.2, 3.2]) {
       const line = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 5), new THREE.MeshBasicMaterial({ color: '#d9d4c0' }));
       line.rotation.x = -Math.PI / 2;
@@ -313,20 +325,28 @@ export class ShopScene {
       counter: new THREE.Vector3(0.5, 0, 2.9), you: new THREE.Vector3(-1.4, 0, 2.3),
       slots: [new THREE.Vector3(-0.4, 1.08, 1.5), new THREE.Vector3(0.4, 1.08, 1.5)],
       browse: [new THREE.Vector3(-0.4, 0, 2.6), new THREE.Vector3(0.6, 0, 2.6)],
-      camera: new THREE.Vector3(2.5, 3.6, 8.5), target: new THREE.Vector3(0, 1, 1.4),
+      camera: new THREE.Vector3(3.2, 5.2, 11.5), target: new THREE.Vector3(0, 0.8, 1.0),
       decor: {},
     };
   }
 
   private buildGarage(g: THREE.Group): void {
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(9, 7), mat('#5a5a5e', { roughness: 0.9 }));
+    const floorTex = floorTexture('#5a5a5e', false);
+    floorTex.repeat.set(3, 2.4);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(9, 7), mat('#ffffff', { map: floorTex, roughness: 0.9 }));
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     g.add(floor);
-    const outside = new THREE.Mesh(new THREE.PlaneGeometry(20, 8), mat('#2a2c33', { roughness: 0.95 }));
-    outside.rotation.x = -Math.PI / 2;
-    outside.position.set(0, -0.01, 7);
-    g.add(outside);
+    // The garage and its driveway sit on a plinth, like a model.
+    const plinth = new THREE.Mesh(new RoundedBoxGeometry(9.8, 0.5, 11.2, 2, 0.06), mat('#1b1826', { roughness: 0.7 }));
+    plinth.position.set(0, -0.26, 2.0);
+    const drive = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 4.1), mat('#3a3a42', { roughness: 0.95 }));
+    drive.rotation.x = -Math.PI / 2;
+    drive.position.set(0, 0.001, 5.55);
+    drive.receiveShadow = true;
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(9.8, 0.04, 0.04), new THREE.MeshStandardMaterial({ color: '#ffb020', emissive: '#ffb020', emissiveIntensity: 0.6 }));
+    edge.position.set(0, -0.12, 7.62);
+    g.add(plinth, drive, edge);
     const wall = mat('#6b6257', { roughness: 0.95 });
     const back = new THREE.Mesh(new THREE.PlaneGeometry(9, 3.2), wall);
     back.position.set(0, 1.6, -3);
@@ -425,9 +445,22 @@ export class ShopScene {
     // Walls with real thickness, so the cutaway reads like a model.
     const back = new THREE.Mesh(new THREE.BoxGeometry(width + 0.2, 4.5, 0.2), wallMat);
     back.position.set(0.1 - 0.2, 2.25, -2.6);
-    const side = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.5, depth + 0.2), wallMat);
-    side.position.set(-width / 2 - 0.1, 2.25, 0.4);
-    back.receiveShadow = side.receiveShadow = true;
+    // The side wall has a real doorway (customers walk in through it).
+    const doorZ = 2.2, doorHalf = 0.6, doorTop = 2.6;
+    const wallZ0 = 0.5 - depth / 2 - 0.1 - 0.1, wallZ1 = 0.5 + depth / 2 + 0.1 - 0.1;
+    const sideA = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.5, doorZ - doorHalf - wallZ0), wallMat);
+    sideA.position.set(-width / 2 - 0.1, 2.25, (wallZ0 + doorZ - doorHalf) / 2);
+    const sideB = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.5, wallZ1 - doorZ - doorHalf), wallMat);
+    sideB.position.set(-width / 2 - 0.1, 2.25, (doorZ + doorHalf + wallZ1) / 2);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.5 - doorTop, doorHalf * 2), wallMat);
+    lintel.position.set(-width / 2 - 0.1, (4.5 + doorTop) / 2, doorZ);
+    const side = new THREE.Group();
+    side.add(sideA, sideB, lintel);
+    back.receiveShadow = sideA.receiveShadow = sideB.receiveShadow = true;
+    const mat2 = new THREE.Mesh(new THREE.PlaneGeometry(0.9, doorHalf * 2 - 0.1), mat('#2a2430', { roughness: 1 }));
+    mat2.rotation.x = -Math.PI / 2;
+    mat2.position.set(-width / 2 + 0.45, 0.006, doorZ);
+    g.add(mat2);
     const capMat = mat(premium ? '#d8b56a' : '#6a6478', { roughness: 0.7, metalness: premium ? 0.8 : 0 });
     const capBack = new THREE.Mesh(new THREE.BoxGeometry(width + 0.24, 0.06, 0.24), capMat);
     capBack.position.set(-0.1, 4.53, -2.6);
@@ -436,8 +469,8 @@ export class ShopScene {
     const skirt = mat(`#${new THREE.Color(theme.wall).multiplyScalar(0.6).getHexString()}`);
     const skirtBack = new THREE.Mesh(new THREE.BoxGeometry(width, 0.16, 0.04), skirt);
     skirtBack.position.set(0, 0.08, -2.48);
-    const skirtSide = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, depth), skirt);
-    skirtSide.position.set(-width / 2 + 0.02, 0.08, 0.5);
+    const skirtSide = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, doorZ - doorHalf - (0.5 - depth / 2)), skirt);
+    skirtSide.position.set(-width / 2 + 0.02, 0.08, (0.5 - depth / 2 + doorZ - doorHalf) / 2);
     g.add(back, side, capBack, capSide, skirtBack, skirtSide);
     // Pendant lamps over the floor.
     for (const x of [-width / 4, 0.1 * width, width / 4 + 0.6]) {
@@ -524,17 +557,20 @@ export class ShopScene {
     till.position.set(counterX + 0.3, 1.15, 0.8);
     g.add(counter, till);
 
-    const doorZ = 2.2;
     const frameMat = mat(premium ? '#d8b56a' : '#16141c', { metalness: 0.6, roughness: 0.3 });
     for (const dz of [-0.6, 0.6]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.6, 0.12), frameMat);
       post.position.set(-width / 2 + 0.1, 1.3, doorZ + dz);
       g.add(post);
     }
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.5), new THREE.MeshBasicMaterial({ color: '#ffe9b0', transparent: true, opacity: 0.18 }));
-    glow.rotation.y = Math.PI / 2;
-    glow.position.set(-width / 2 + 0.05, 1.25, doorZ);
-    g.add(glow);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.32), frameMat);
+    head.position.set(-width / 2 + 0.1, 2.6, doorZ);
+    g.add(head);
+    // Light spilling out of the doorway onto the pavement.
+    const spill = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.3), new THREE.MeshBasicMaterial({ color: '#ffe0a0', transparent: true, opacity: 0.12, depthWrite: false }));
+    spill.rotation.x = -Math.PI / 2;
+    spill.position.set(-width / 2 - 0.8, 0.01, doorZ);
+    g.add(spill);
 
     this.layout = {
       outside: new THREE.Vector3(-width / 2 - 1.5, 0, doorZ), entrance: new THREE.Vector3(-width / 2 + 1, 0, doorZ),

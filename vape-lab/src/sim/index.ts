@@ -15,3 +15,4 @@ export * from './shop';
 export * from './commission';
 export * from './city';
 export * from './turf';
+export * from './night';

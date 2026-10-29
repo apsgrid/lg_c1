@@ -439,6 +439,10 @@ details.danger { margin-top: 24px; color: var(--muted); }
 @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes pop { 0% { transform: scale(0.92); opacity: 0; } 60% { transform: scale(1.03); opacity: 1; } 100% { transform: scale(1); } }
 
+.tonight { border: 1px solid rgba(255, 210, 122, 0.35); background: linear-gradient(135deg, rgba(255, 210, 122, 0.08), rgba(90, 120, 255, 0.08)); border-radius: var(--radius); padding: 10px 12px; margin: 8px 0 12px; display: grid; gap: 6px; justify-items: start; }
+.tonight p { margin: 0; }
+.round-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 3px; text-align: left; font-size: 13px; }
+
 /* --- Look & feel polish ------------------------------------------------------------- */
 :root { --display: 'Fredoka', 'Trebuchet MS', system-ui, sans-serif; --card: #211e2e; --card-hi: rgba(255, 255, 255, 0.045); }
 html, body { background: radial-gradient(1200px 600px at 20% -10%, #2a1a3a 0%, transparent 60%), radial-gradient(900px 500px at 110% 110%, #10283a 0%, transparent 60%), var(--bg); }

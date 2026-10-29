@@ -9,6 +9,7 @@ import { data, state } from '../state';
 import { storage } from '../store/storage';
 import type { ShopScene } from '../view/shopScene';
 import { bar, clear, h, scoreColour } from './dom';
+import { tonightCard } from './night';
 import { toast } from './toast';
 
 const archetype = (id: string) => data.customers.find((c) => c.id === id);
@@ -489,6 +490,7 @@ export function mountCounter(root: HTMLElement): void {
       return;
     }
     const repD = r.reputationEnd - r.reputationStart;
+    body.append(tonightCard());
     if (r.closed) body.append(h('div.closed-banner', {}, h('b', {}, `Closed on day ${r.day}`), h('div', {}, r.closed)));
     const heatD = (r.heatEnd ?? 0) - (r.heatStart ?? 0);
     body.append(

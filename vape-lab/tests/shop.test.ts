@@ -551,3 +551,64 @@ describe('turf war', () => {
     expect(['low', 'medium', 'high']).toContain(cbd.bustRisk);
   });
 });
+
+describe('Night Round', () => {
+  async function withRegulars() {
+    const s = stocked(2, 1000);
+    s.listings = s.listings.map((l) => ({ ...l, stock: 20 }));
+    s.regulars = ['Ana', 'Ben', 'Cat', 'Dev', 'Eli'].map((name, i) => ({
+      id: `r${i}`, name, archetype: 'fruit_fanatic' as const, loyalty: 90, favourite: s.listings[i % 2].product.id,
+      visits: 5, joinedDay: 1, lastVisitDay: 1, gone: false,
+    }));
+    return s;
+  }
+
+  it('loyal regulars send orders, deterministically, without touching stock', async () => {
+    const { nightOrders } = await import('../src/sim');
+    const s = await withRegulars();
+    const a = nightOrders(s, data);
+    expect(a.length).toBeGreaterThan(0);
+    expect(a.length).toBeLessThanOrEqual(4);
+    expect(nightOrders(s, data)).toEqual(a);
+    expect(new Set(a.map((o) => o.door)).size).toBe(a.length);
+    const cold = { ...s, regulars: s.regulars.map((r) => ({ ...r, loyalty: 10 })) };
+    expect(nightOrders(cold, data)).toEqual([]);
+  });
+
+  it('a perfect round pays, tips, uses stock and builds loyalty; misses and broken windows cost', async () => {
+    const { nightOrders, nightRound } = await import('../src/sim');
+    const s = await withRegulars();
+    const orders = nightOrders(s, data);
+    const stock = s.listings.reduce((t, l) => t + l.stock, 0);
+    const perfect = nightRound(s, data, orders.map((o) => o.regularId), 0);
+    expect(perfect.delivered).toBe(orders.length);
+    expect(perfect.tip).toBeGreaterThan(0);
+    expect(perfect.shop.cash).toBeCloseTo(s.cash + perfect.takings + perfect.tip, 2);
+    expect(perfect.shop.listings.reduce((t, l) => t + l.stock, 0)).toBe(stock - orders.length);
+    expect(perfect.shop.reputation).toBeGreaterThan(s.reputation);
+    const sloppy = nightRound(s, data, [], 2);
+    expect(sloppy.delivered).toBe(0);
+    expect(sloppy.shop.cash).toBe(s.cash);
+    expect(sloppy.shop.reputation).toBeLessThan(s.reputation);
+    expect(sloppy.shop.heat).toBeGreaterThan(s.heat);
+    const reg = sloppy.shop.regulars.find((r) => r.id === orders[0].regularId)!;
+    expect(reg.loyalty).toBeLessThan(90);
+  });
+
+  it('one night action: a round rules out a drive-by and vice versa', async () => {
+    const { nightOrders, nightRound, driveBy } = await import('../src/sim');
+    const s = await withRegulars();
+    const after = nightRound(s, data, nightOrders(s, data).map((o) => o.regularId), 0).shop;
+    expect(driveBy(after, 'mist_co', 3, data).shop).toBe(after);
+    const bombed = driveBy(s, 'mist_co', 3, data).shop;
+    expect(nightRound(bombed, data, ['r0'], 0).shop).toBe(bombed);
+  });
+
+  it('a clean sweep wipes the rival\'s notes on you', async () => {
+    const { driveBy } = await import('../src/sim');
+    const s: ShopState = { ...stocked(2, 5000), heat: 0 };
+    s.rivals = s.rivals.map((r) => (r.id === 'mist_co' ? { ...r, knowledge: { a: 80, b: 40 } } : r));
+    const k = driveBy(s, 'mist_co', 3, data, 0, true).shop.rivals.find((r) => r.id === 'mist_co')!.knowledge;
+    expect(Object.values(k).every((v) => v === 0)).toBe(true);
+  });
+});

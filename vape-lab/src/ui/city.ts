@@ -1,12 +1,13 @@
 import {
   BRANCH_COST, branchStatus, buyStash, cityLoc, closeBranch, districtsLed, forecastAt, INDIE, intelEstimate, isCrackdown,
-  KNOCKOFF_AT, leader, moveStore, openBranch, parkCar, relocationCost, restockDays, sellLocId, STASH_COST, STASH_MOVE_COST,
+  KNOCKOFF_AT, leader, moveStore, nightUsed, openBranch, parkCar, relocationCost, restockDays, sellLocId, STASH_COST, STASH_MOVE_COST,
   storageLocId, tierOf, turfOf, WIN_DISTRICTS, YOU, type CityLocation, type PlaceForecast, type ShopState,
 } from '../sim';
 import { onShop, shopAction, shopState } from '../shopState';
 import { data } from '../state';
 import { bar, clear, h } from './dom';
 import { openDriveBy } from './driveby';
+import { tonightCard } from './night';
 import { themeFor } from '../view/districtTheme';
 import { toast } from './toast';
 
@@ -542,9 +543,9 @@ export function mountCityPanel(root: HTMLElement): void {
     for (const r of rivalsHere) {
       const closed = r.closedUntil >= s.day;
       acts.append(h('button.danger-btn', {
-        disabled: shopState.playing || closed || s.lastDriveByDay === s.day,
+        disabled: shopState.playing || closed || nightUsed(s),
         onclick: () => openDriveBy(r.id),
-      }, `🔥 Drive-by on ${r.name}`, h('span.fine', {}, closed ? ' · already shut' : s.lastDriveByDay === s.day ? ' · one per night' : ' · big heat')));
+      }, `🔥 Drive-by on ${r.name}`, h('span.fine', {}, closed ? ' · already shut' : nightUsed(s) ? ' · one job a night' : ' · big heat')));
     }
     if (acts.childElementCount) body.append(h('h3', {}, 'Do something here'), acts);
     if (rivalsHere.length) body.append(...rivalsHere.map((r) => h('p.fine', {}, `${r.name} has a ${r.loc === loc.id ? 'flagship store' : 'branch'} here. ${r.closedUntil >= s.day ? `Shut until day ${r.closedUntil + 1}.` : `Grudge against you: ${grudgeLabel(r.grudge)}.`}`)));
@@ -572,6 +573,7 @@ export function mountCityOverview(root: HTMLElement): void {
         h('p.fine', {}, led.length ? `You lead: ${led.map((l) => name(l)).join(', ')}.` : 'Lead a district by having the biggest share there (at least 30%).'),
         h('p.fine', {}, `Lead ${WIN_DISTRICTS} of ${(data.city ?? []).length} districts to win. Your share grows where you trade, with good reputation, a range that suits the locals, and fair prices. Leading draws the police, though.`),
       ),
+      tonightCard(),
       heatBlock(s),
       h('ul.heat-notes', {},
         h('li', {}, 'Raised by: selling from the car, serving kids, drive-bys, protests, refusing refunds, and leading districts (big leads bring 🚨 crackdowns).'),
@@ -633,9 +635,9 @@ export function mountCityRivals(root: HTMLElement): void {
         h('div.fine.intel-title', {}, s.vigilance ? 'What your staff think they know about your recipes:' : 'Hire security in the Shop to get intel on what they know.'),
         s.vigilance ? h('div', {}, ...intel) : null,
         h('button.small.danger-btn', {
-          disabled: shopState.playing || closed || s.lastDriveByDay === s.day,
+          disabled: shopState.playing || closed || nightUsed(s),
           onclick: () => { select(r.loc); openDriveBy(r.id); },
-        }, closed ? 'Shut' : s.lastDriveByDay === s.day ? 'One drive-by a night' : '🔥 Drive-by on their HQ'),
+        }, closed ? 'Shut' : nightUsed(s) ? 'One job a night' : '🔥 Drive-by on their HQ'),
       ));
     }
   };

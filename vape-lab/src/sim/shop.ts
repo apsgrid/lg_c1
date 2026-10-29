@@ -191,6 +191,8 @@ export interface ShopState {
   /** Word going round the school gates that you'll serve kids. */
   kidBuzz: number;
   lastDriveByDay: number;
+  /** The night you last did a Night Round (deliveries to regulars). */
+  lastRoundDay?: number;
   /** Shut for this day (raid, arrest, firebomb). */
   closedDay?: number;
   closedReason?: string;
@@ -238,6 +240,7 @@ export function newShop(seed: number, name = 'My Vape Store'): ShopState {
     heat: 0,
     kidBuzz: 0,
     lastDriveByDay: 0,
+    lastRoundDay: 0,
   };
 }
 
@@ -249,7 +252,7 @@ export function migrateShop(raw: unknown): ShopState {
   const s = raw as Partial<ShopState> & { version?: number };
   const extras = {
     upgrades: s.upgrades ?? [], commissions: s.commissions ?? [], nextCommissionId: s.nextCommissionId ?? 1,
-    home: s.home ?? 'suburbs', car: s.car ?? 'suburbs', heat: s.heat ?? 0, kidBuzz: s.kidBuzz ?? 0, lastDriveByDay: s.lastDriveByDay ?? 0,
+    home: s.home ?? 'suburbs', car: s.car ?? 'suburbs', heat: s.heat ?? 0, kidBuzz: s.kidBuzz ?? 0, lastDriveByDay: s.lastDriveByDay ?? 0, lastRoundDay: s.lastRoundDay ?? 0,
     store: s.store ?? ((s.tier ?? 2) >= 2 ? 'market' : undefined),
     rivals: (s.rivals ?? []).map((r) => {
       const loc = r.loc ?? RIVAL_LOCS[r.id] ?? 'cbd';
@@ -323,6 +326,11 @@ export function moveStore(shop: ShopState, locId: string, data: GameData): ShopS
   return s;
 }
 
+/** One thing a night after closing: a drive-by or a Night Round. */
+export function nightUsed(shop: ShopState): boolean {
+  return shop.lastDriveByDay === shop.day || shop.lastRoundDay === shop.day;
+}
+
 export interface DriveByResult {
   shop: ShopState;
   caught: boolean;
@@ -334,10 +342,11 @@ export interface DriveByResult {
  * the mini game) shut them for that many days and burn some of their notes on
  * you. Raises heat a lot, may get you arrested, and they'll want revenge.
  * `collateral` counts the wrong buildings hit on the way: each adds heat.
+ * `sweep` (every shopfront on the street lit) burns all their notes on you.
  */
-export function driveBy(shop: ShopState, rivalId: string, hits: number, data: GameData, collateral = 0): DriveByResult {
+export function driveBy(shop: ShopState, rivalId: string, hits: number, data: GameData, collateral = 0, sweep = false): DriveByResult {
   const rival = shop.rivals.find((r) => r.id === rivalId);
-  if (!rival || shop.lastDriveByDay === shop.day || rival.closedUntil >= shop.day) return { shop, caught: false, text: 'Not tonight.' };
+  if (!rival || nightUsed(shop) || rival.closedUntil >= shop.day) return { shop, caught: false, text: 'Not tonight.' };
   const s = clone(shop);
   const r = s.rivals.find((x) => x.id === rivalId)!;
   const rng = mulberry32(deriveSeed(s.seed, `driveby:${s.day}:${rivalId}:${hits}`));
@@ -349,6 +358,10 @@ export function driveBy(shop: ShopState, rivalId: string, hits: number, data: Ga
     r.closedUntil = s.day + hits - 1;
     for (const k of Object.keys(r.knowledge)) r.knowledge[k] = round1(r.knowledge[k] * (1 - 0.2 * hits));
     text = `${r.name} is shut for ${hits} day${hits === 1 ? '' : 's'}, and some of their notes on you went up in smoke.`;
+    if (sweep) {
+      for (const k of Object.keys(r.knowledge)) r.knowledge[k] = 0;
+      text += ' Clean sweep: every note they had on your recipes is gone.';
+    }
   } else text = `You missed ${r.name} completely. They saw your car though.`;
   if (collateral > 0) text += ` You also hit ${collateral === 1 ? 'the wrong building' : `${collateral} wrong buildings`}, and the neighbours called it in.`;
   const caught = rng() < (cityLoc(data, r.loc)?.police ?? 0.5) * 0.3 * (1 + s.heat / 100);
